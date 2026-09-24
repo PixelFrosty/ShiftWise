@@ -7,8 +7,7 @@ import { HttpClient } from '@angular/common/http';
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet],
-  template: `<p>{{ message }}</p>
-  <img [src]="imageUrl" style="width: 300px; height: auto;">`, // purely for demonstration
+  template: `<p>{{ message }}</p>`, // purely for demonstration
   // templateUrl: './app.component.html',
   // styleUrl: './app.component.scss'
 })

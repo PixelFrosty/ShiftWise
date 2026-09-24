@@ -1,0 +1,23 @@
+services:
+    backend:
+        build:
+            context: ./backend
+        ports:
+            - "8000:8000"
+        volumes:
+            - ./backend:/app/backend
+            - ./database:/app/database:z
+        working_dir: /app/backend
+        environment:
+            - PYTHONUNBUFFERED=1
+
+    frontend:
+        build:
+            context: ./frontend
+        ports:
+            - "4200:4200"
+        volumes:
+            - ./frontend:/app
+            - /app/node_modules
+        depends_on:
+            - backend

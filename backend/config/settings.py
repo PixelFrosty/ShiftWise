@@ -135,3 +135,10 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+import os
+import sys
+
+# Print only in the main worker process when running runserver
+if 'runserver' in sys.argv and os.environ.get('RUN_MAIN') == 'true':
+    print("\n  ➜ Local App Access: http://localhost:8000/\n")
