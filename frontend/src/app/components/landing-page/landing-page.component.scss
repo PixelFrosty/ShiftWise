@@ -1,0 +1,120 @@
+:host {
+    display: block;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #f8fafc;
+    color: #1e293b;
+}
+
+.navbar {
+    display: flex;
+    align-items: center;
+    padding: 1rem 2rem;
+    background-color: #ffffff;
+    border-bottom: 2px solid #e2e8f0;
+
+    .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+
+        .logo-icon {
+            font-size: 1.5rem;
+        }
+
+        .brand-name {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: #2563eb;
+        }
+    }
+}
+
+.content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+}
+
+.btn-download {
+    background-color: #2563eb;
+    color: #ffffff;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+        background-color: #1d4ed8;
+    }
+}
+
+.hero {
+    text-align: center;
+    margin-bottom: 4rem;
+
+    .hero-text {
+        font-size: 1.25rem;
+        line-height: 1.7;
+        color: #334155;
+        max-width: 650px;
+        margin: 0 auto 2rem;
+    }
+
+    .hero-avatar {
+        font-size: 5rem;
+        display: inline-block;
+        padding: 1rem;
+        background: #ffffff;
+        border-radius: 50%;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .hero-actions {
+        margin-top: 2rem;
+    }
+}
+
+.features-section {
+    .features-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-bottom: 1.5rem;
+        color: #0f172a;
+        border-bottom: 2px solid #cbd5e1;
+        padding-bottom: 0.5rem;
+        display: inline-block;
+    }
+
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .feature-card {
+        background-color: #ffffff;
+        padding: 1.75rem 1.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        text-align: center;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+        &:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin: 0;
+        }
+    }
+}
