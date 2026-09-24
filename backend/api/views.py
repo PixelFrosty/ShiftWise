@@ -9,11 +9,12 @@ from rest_framework import status
 from .serializers import UserSerializer
 
 @api_view(['GET'])
-def test_api(request):
+def test(request):
     data = {
         'message': 'Hello World! - This is a test API endpoint.',
     }
     return Response(data)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny]) # in place because settings.py restricts annonymous users from requesting too often
