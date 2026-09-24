@@ -54,29 +54,31 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'login_required.middleware.LoginRequiredMiddleware',
 ]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '1000/day',
+        'anon': '100/day',
+    },
 }
-
-LOGIN_REQUIRED_IGNORE_PATHS = [
-    # eventual URLs that dont require user to be logged in
-    # things like login/logout/signup/info etc
-    r'/admin/$'
-    # TODO: Fill URLs here
-]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:4200",
     "http://127.0.0.1:4200",
+    "http://127.0.0.1:8000",
 ]
 
 ROOT_URLCONF = 'config.urls'

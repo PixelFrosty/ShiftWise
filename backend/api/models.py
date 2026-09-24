@@ -13,3 +13,9 @@ class User(AbstractUser):
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name', 'date_of_birth']
+
+    def __str__(self):
+        return self.email
+
+    def create_user(self, email, username, first_name, last_name, date_of_birth, password):
+        User.objects.create_user(username, email, password, first_name, last_name, date_of_birth)
