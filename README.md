@@ -55,10 +55,10 @@ podman-compose up --build
 # use -d at the end to run in background
 
 # Run Django Migrations
-podman-compose exec web python manage.py migrate
+podman-compose exec backend python manage.py migrate
 
 # Create a Django Admin
-podman-compose exec web python manage.py createsuperuser
+podman-compose exec backend python manage.py createsuperuser
 
 # To stop the containers, run the following command
 # You will need another terminal if not ran in the background.

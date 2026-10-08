@@ -1,6 +1,11 @@
 # Python virtual environment
 .venv/
 
+# Django / Database
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
