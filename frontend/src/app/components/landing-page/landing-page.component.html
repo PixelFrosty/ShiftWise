@@ -1,41 +1,48 @@
 <header class="navbar">
-    <div class="brand">
-        <span class="brand-name">ShiftWise</span>
+    <button class="menu-btn" (click)="toggleMenu()" aria-label="Toggle navigation menu">
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+    </button>
+    <h1 class="brand-title">Shiftwise</h1>
+
+    @if (isMenuOpen) {
+    <div class="dropdown-menu">
+        <a href="#" class="menu-item">About Us</a>
+        <a href="#" class="menu-item">Contact</a>
     </div>
+    }
 </header>
 
-<main class="content">
-    <section class="hero">
-        <p class="hero-text">
-            ShiftWise is an automatic, interactive employee scheduler designed to cut down the time it takes for a
-            business to create the perfect schedule.
-        </p>
+<main class="page-container">
+    <div class="login-card">
+        <h2 class="card-title">Log In</h2>
 
-        <div class="hero-avatar">
-            🥺
-        </div>
+        <form class="login-form" (ngSubmit)="onLogin($event)">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" class="form-input" />
+            </div>
 
-        <div class="hero-actions">
-            <button class="btn-download">Download the app please!</button>
-        </div>
-    </section>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" class="form-input" />
+            </div>
 
-    <section id="features" class="features-section">
-        <h2 class="features-title">Features</h2>
+            @if (hasError) {
+            <div class="error-banner">
+                {{ errorMessage }}
+            </div>
+            }
 
-        <div class="features-grid">
-            <div class="feature-card">
-                <h3>Custom Permissions</h3>
+            <div class="form-links">
+                <p class="signup-text">
+                    Don't have an account? <a routerLink="/register" class="signup-btn">Click here</a>
+                </p>
+                <a routerLink="/forgot-password" class="inline-link forgot-link">Forgot password?</a>
             </div>
-            <div class="feature-card">
-                <h3>Responsive Schedule</h3>
-            </div>
-            <div class="feature-card">
-                <h3>Real-Time Notifications</h3>
-            </div>
-            <div class="feature-card">
-                <h3>Doesn't Exist Yet</h3>
-            </div>
-        </div>
-    </section>
+
+            <button type="submit" class="submit-btn">Log In</button>
+        </form>
+    </div>
 </main>
