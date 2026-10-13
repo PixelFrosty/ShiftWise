@@ -1,1 +1,8 @@
-/* You can add global styles to this file, and also import other style files */
+a {
+    color: #333333; // Or #000000 for pitch black
+    text-decoration: underline;
+
+    &:hover {
+        color: #000000;
+    }
+}
