@@ -1,0 +1,6 @@
+django>=5.1
+ortools>=9.11
+psycopg[binary]>=3.2
+python-dotenv>=1.0
+pytest>=8.0
+pytest-django>=4.9

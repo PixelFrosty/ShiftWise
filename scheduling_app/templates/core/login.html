@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign In - SmartSchedule AI{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto my-12">
+    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-600 text-white font-black text-2xl mb-2">S</div>
+            <h1 class="text-2xl font-bold text-slate-800">Welcome Back</h1>
+            <p class="text-sm text-slate-500 mt-1">Sign in to access your scheduling portal</p>
+        </div>
+
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="id_username" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Username</label>
+                <input type="text" name="username" autofocus required id="id_username" class="form-input" placeholder="e.g. ceo or manager1">
+            </div>
+
+            <div>
+                <label for="id_password" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Password</label>
+                <input type="password" name="password" required id="id_password" class="form-input" placeholder="••••••••">
+            </div>
+
+            <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md shadow-sm transition">
+                Sign In
+            </button>
+        </form>
+
+        <div class="mt-8 pt-6 border-t border-slate-100">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Quick Demo Credentials (Password: <code class="text-slate-700">password123</code>)</h3>
+            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                <button type="button" onclick="fillCreds('ceo', 'password123')" class="p-2 border border-slate-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition">
+                    <span class="block font-semibold text-purple-700">CEO</span>
+                    <span class="text-slate-500">ceo</span>
+                </button>
+                <button type="button" onclick="fillCreds('manager1', 'password123')" class="p-2 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition">
+                    <span class="block font-semibold text-blue-700">Manager</span>
+                    <span class="text-slate-500">manager1</span>
+                </button>
+                <button type="button" onclick="fillCreds('emp1', 'password123')" class="p-2 border border-slate-200 rounded-lg hover:border-emerald-400 hover:bg-emerald-50 transition">
+                    <span class="block font-semibold text-emerald-700">Employee</span>
+                    <span class="text-slate-500">emp1</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function fillCreds(user, pass) {
+        document.getElementById('id_username').value = user;
+        document.getElementById('id_password').value = pass;
+    }
+</script>
+{% endblock %}

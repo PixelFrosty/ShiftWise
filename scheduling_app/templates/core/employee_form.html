@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - SmartSchedule AI{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto my-6">
+    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+        <div class="mb-6 pb-4 border-b border-slate-100 flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold text-slate-900">{{ title }}</h1>
+                <p class="text-xs text-slate-500 mt-1">Fill out the employee profile details and productivity parameters</p>
+            </div>
+            <a href="{% url 'employee_list' %}" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancel &larr;</a>
+        </div>
+
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-800">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Full Name</label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Department</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.department.errors }}</div>{% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Position / Job Title</label>
+                    {{ form.position }}
+                    {% if form.position.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.position.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Contact Info (Email / Phone)</label>
+                {{ form.contact_info }}
+                {% if form.contact_info.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.contact_info.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Productivity Score (1.0-10.0)</label>
+                    {{ form.productivity_score }}
+                    <span class="text-[11px] text-slate-400">Used by solver objective</span>
+                    {% if form.productivity_score.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.productivity_score.errors }}</div>{% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Pay Rate ($/hr)</label>
+                    {{ form.pay_rate }}
+                    <span class="text-[11px] text-slate-400">Optional / Nullable</span>
+                    {% if form.pay_rate.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.pay_rate.errors }}</div>{% endif %}
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Max Weekly Hours</label>
+                    {{ form.max_hours_per_week }}
+                    <span class="text-[11px] text-slate-400">Hard constraint</span>
+                    {% if form.max_hours_per_week.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.max_hours_per_week.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="pt-6 flex justify-end space-x-3">
+                <a href="{% url 'employee_list' %}" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md text-sm font-medium transition">
+                    Cancel
+                </a>
+                <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-semibold shadow-sm transition">
+                    Save Employee
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

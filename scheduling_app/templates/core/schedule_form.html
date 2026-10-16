@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - SmartSchedule AI{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto my-6">
+    <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+        <div class="mb-6 pb-4 border-b border-slate-100 flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold text-slate-900">{{ title }}</h1>
+                <p class="text-xs text-slate-500 mt-1">Set up a department schedule for a specific week</p>
+            </div>
+            <a href="{% url 'schedule_list' %}" class="text-xs font-medium text-slate-500 hover:text-slate-800">Cancel &larr;</a>
+        </div>
+
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-800">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Department</label>
+                {{ form.department }}
+                {% if form.department.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.department.errors }}</div>{% endif %}
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Schedule Title</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Week Starting Date (Monday)</label>
+                {{ form.week_start_date }}
+                <span class="text-[11px] text-slate-400">Select the Monday for this 7-day schedule period</span>
+                {% if form.week_start_date.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.week_start_date.errors }}</div>{% endif %}
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Initial Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="pt-6 flex justify-end space-x-3">
+                <a href="{% url 'schedule_list' %}" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md text-sm font-medium transition">
+                    Cancel
+                </a>
+                <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-semibold shadow-sm transition">
+                    Create &amp; Open Editor
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

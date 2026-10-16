@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+
+{% block title %}Review Time Off - SmartSchedule AI{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto my-6 space-y-6">
+    <!-- Header -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <div class="flex items-center space-x-2">
+                <h1 class="text-2xl font-bold text-slate-900">Review Leave Request</h1>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+                    {% if request_obj.status == 'APPROVED' %}bg-emerald-100 text-emerald-800
+                    {% elif request_obj.status == 'DENIED' %}bg-rose-100 text-rose-800
+                    {% else %}bg-amber-100 text-amber-800{% endif %}">
+                    {{ request_obj.get_status_display }}
+                </span>
+            </div>
+            <p class="text-sm text-slate-500 mt-1">
+                Submitted on {{ request_obj.created_at|date:"M j, Y H:i" }} &bull; Department: {{ request_obj.employee.department.name }}
+            </p>
+        </div>
+        <a href="{% url 'time_off_list' %}" class="text-xs font-medium text-slate-500 hover:text-slate-800">&larr; Back to Requests</a>
+    </div>
+
+    <!-- Request Details & Pile-up Spotter -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Employee Card -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400">Employee Details</h2>
+            <div>
+                <div class="text-lg font-bold text-slate-900">{{ request_obj.employee.name }}</div>
+                <div class="text-xs text-slate-500">{{ request_obj.employee.position }}</div>
+            </div>
+
+            <div class="pt-2 border-t border-slate-100 space-y-2 text-xs">
+                <div>
+                    <span class="text-slate-400 block uppercase tracking-wider text-[10px]">Requested Range</span>
+                    <span class="font-semibold text-slate-800 text-sm">
+                        {{ request_obj.start_date|date:"M j, Y" }} – {{ request_obj.end_date|date:"M j, Y" }}
+                    </span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block uppercase tracking-wider text-[10px]">Productivity Score</span>
+                    <span class="font-bold text-slate-800">{{ request_obj.employee.productivity_score }} / 10</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 block uppercase tracking-wider text-[10px]">Reason for Leave</span>
+                    <div class="mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-slate-700 italic">
+                        "{{ request_obj.reason }}"
+                    </div>
+                </div>
+            </div>
+
+            {% if request_obj.reviewed_by %}
+            <div class="pt-3 border-t border-slate-100 text-xs text-slate-500 space-y-1">
+                <div class="font-semibold text-slate-700">Audit Trail:</div>
+                <div>Decided by: <span class="font-medium text-slate-800">{{ request_obj.reviewed_by.username }}</span></div>
+                <div>Timestamp: <span class="font-medium text-slate-800">{{ request_obj.reviewed_at|date:"M j, Y H:i" }}</span></div>
+                {% if request_obj.decision_notes %}
+                <div>Notes: <span class="italic text-slate-700">{{ request_obj.decision_notes }}</span></div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Per-Day People Off Pile-up Spotter (Phase 3 Core Feature) -->
+        <div class="md:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <div>
+                    <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Per-Day "People Off" Pile-up Spotter</h2>
+                    <p class="text-xs text-slate-500">Inspect coverage across all requested dates before deciding</p>
+                </div>
+                <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">Department Scoped</span>
+            </div>
+
+            <div class="overflow-x-auto flex-1">
+                <table class="w-full text-left text-sm text-slate-600">
+                    <thead class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <tr>
+                            <th class="px-5 py-3">Date</th>
+                            <th class="px-5 py-3">Approved Off</th>
+                            <th class="px-5 py-3">Pending</th>
+                            <th class="px-5 py-3">Pile-up Risk</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                        {% for date_key, day_info in pileup_data.items %}
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="px-5 py-3 font-semibold text-slate-900 whitespace-nowrap text-xs">
+                                {{ day_info.date|date:"l, M j" }}
+                            </td>
+                            <td class="px-5 py-3 text-xs">
+                                <span class="font-bold {% if day_info.approved_count > 1 %}text-amber-600{% else %}text-slate-800{% endif %}">
+                                    {{ day_info.approved_count }} off
+                                </span>
+                                {% if day_info.approved_names %}
+                                    <div class="text-[11px] text-slate-500 truncate max-w-[140px]" title="{{ day_info.approved_names|join:', ' }}">
+                                        ({{ day_info.approved_names|join:", " }})
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td class="px-5 py-3 text-xs">
+                                <span class="text-slate-600">{{ day_info.pending_count }} pending</span>
+                                {% if day_info.pending_names %}
+                                    <div class="text-[11px] text-slate-400 truncate max-w-[140px]" title="{{ day_info.pending_names|join:', ' }}">
+                                        ({{ day_info.pending_names|join:", " }})
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td class="px-5 py-3 whitespace-nowrap">
+                                {% if day_info.approved_count >= 2 %}
+                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
+                                        ⚠️ Heavy Pile-up
+                                    </span>
+                                {% elif day_info.approved_count == 1 %}
+                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
+                                        Moderate (1 off)
+                                    </span>
+                                {% else %}
+                                    <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                                        ✓ Clear
+                                    </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Decision Action Bar -->
+            {% if request_obj.status == 'PENDING' %}
+            <div class="p-4 border-t border-slate-200 bg-slate-50">
+                <form method="post" class="space-y-3">
+                    {% csrf_token %}
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Decision Notes (Logged in audit trail)</label>
+                        <input type="text" name="decision_notes" placeholder="e.g. Approved. Team coverage is sufficient." class="form-input text-xs">
+                    </div>
+
+                    <div class="flex items-center justify-end space-x-3 pt-2">
+                        <button type="submit" name="action" value="DENY" class="px-4 py-2 border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold shadow-xs transition">
+                            Deny Request
+                        </button>
+                        <button type="submit" name="action" value="APPROVE" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition">
+                            Approve &amp; Block Shifts
+                        </button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Reset Compatibility - SmartSchedule AI{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto my-12">
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-center">
+        <h1 class="text-xl font-bold text-slate-900 mb-2">Reset Pairwise Score?</h1>
+        <p class="text-sm text-slate-500 mb-6">
+            Reset compatibility between <span class="font-semibold text-slate-800">{{ pair.employee_a.name }}</span> and <span class="font-semibold text-slate-800">{{ pair.employee_b.name }}</span>? 
+            This pair will default back to neutral (5.0).
+        </p>
+
+        <form method="post" class="flex justify-center space-x-3">
+            {% csrf_token %}
+            <a href="{% url 'compatibility_list' %}" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md text-sm font-medium transition">
+                Cancel
+            </a>
+            <button type="submit" class="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-sm font-semibold shadow-sm transition">
+                Reset to Neutral
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
