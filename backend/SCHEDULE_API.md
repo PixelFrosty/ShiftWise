@@ -1,7 +1,9 @@
-# Schedule & Shift API
+# Schedule API
 
-All endpoints are under `/api/`, require `Authorization: Bearer <access token>` (from `POST /api/login/`),
-and return JSON. Missing/invalid token → `401`.
+Follows the team's database diagram: each `Schedule` row is one work block for one employee on one day.
+
+All endpoints are under `/api/schedules/`, require `Authorization: Bearer <access token>`
+(from `POST /api/login/`), and return JSON. Missing/invalid token → `401`.
 
 ## Status codes and errors
 
@@ -12,71 +14,90 @@ and return JSON. Missing/invalid token → `401`.
 | 204 | Deleted (no body) |
 | 400 | Validation failed. Body is `{ "<field>": ["message", ...] }`; cross-field errors appear under `non_field_errors` |
 | 401 | Missing, expired or invalid token |
-| 404 | Schedule/shift does not exist (or shift is not under that schedule) |
+| 404 | Schedule does not exist |
 
-Example 400: `{"end": ["end must be after start."]}`
+Example 400: `{"end_time": ["end_time must be after start_time (overnight shifts are not supported)."]}`
 
-## Schedules
-
-A schedule covers one week. `week_start` must be a **Monday**.
+## Endpoints
 
 | Method | URL | Notes |
 |--------|-----|-------|
-| GET | `/api/schedules/` | List. Optional filters: `?week_start=YYYY-MM-DD`, `?status=draft\|published` |
+| GET | `/api/schedules/` | List, ordered by `shift_date`, `start_time`. Optional filters below |
 | POST | `/api/schedules/` | Create |
-| GET | `/api/schedules/{id}/` | Detail, includes nested `shifts` |
-| PUT / PATCH | `/api/schedules/{id}/` | Full / partial update |
-| DELETE | `/api/schedules/{id}/` | Deletes the schedule and all its shifts |
+| GET | `/api/schedules/{id}/` | Read one |
+| PUT | `/api/schedules/{id}/` | Replace (all required fields) |
+| PATCH | `/api/schedules/{id}/` | Partial update |
+| DELETE | `/api/schedules/{id}/` | Delete |
 
-Request body (POST/PUT):
+### List filters (all optional, combine freely)
 
-```json
-{ "name": "Front counter", "week_start": "2026-10-19", "status": "draft" }
-```
+| Param | Example | Meaning |
+|-------|---------|---------|
+| `employee` | `?employee=4` | Employee Profile id |
+| `department` | `?department=2` | Employees in that department |
+| `status` | `?status=scheduled` | `scheduled`, `completed` or `cancelled` |
+| `shift_date` | `?shift_date=2026-10-19` | Exactly that day |
+| `date_from`, `date_to` | `?date_from=2026-10-19&date_to=2026-10-25` | Inclusive range. Use this for a weekly view |
 
-`name` and `week_start` are required. `status` is optional (`draft` default, or `published`).
-`created_by` is set from the logged-in user and ignored if sent.
-`week_start` cannot be changed while the schedule has shifts.
+A malformed filter value returns `400` naming the parameter.
 
-Response (list item; detail adds `shifts`):
+## Request body (POST / PUT / PATCH)
 
 ```json
 {
-  "id": 1, "name": "Front counter", "week_start": "2026-10-19", "status": "draft",
-  "created_by": 3, "shift_count": 2,
-  "date_created": "2026-10-18T22:40:00Z", "date_modified": "2026-10-18T22:40:00Z",
-  "shifts": [ { "id": 7, "schedule": 1, "start": "2026-10-19T14:00:00Z",
-                "end": "2026-10-19T22:00:00Z", "headcount_needed": 2, "notes": "Opening" } ]
+  "task_name": "Register",
+  "employee": 4,
+  "shift_date": "2026-10-19",
+  "start_time": "09:00",
+  "end_time": "17:00",
+  "status": "scheduled",
+  "notes": "Opening"
 }
 ```
 
-## Shifts (nested under a schedule)
+| Field | Required | Rules |
+|-------|----------|-------|
+| `task_name` | yes | Non-blank text, max 255 |
+| `employee` | yes | Id of an existing Employee Profile |
+| `shift_date` | yes | `YYYY-MM-DD` |
+| `start_time`, `end_time` | yes | `HH:MM` or `HH:MM:SS`. `end_time` must be after `start_time` (no overnight shifts) |
+| `status` | no | `scheduled` (default), `completed`, `cancelled` |
+| `notes` | no | Free text |
 
-| Method | URL |
-|--------|-----|
-| GET / POST | `/api/schedules/{schedule_id}/shifts/` |
-| GET / PUT / PATCH / DELETE | `/api/schedules/{schedule_id}/shifts/{id}/` |
+`id`, `employee_name`, `created_at` and `modified_at` are read-only and ignored if sent.
 
-Request body:
+**Double-booking:** a schedule that overlaps another non-cancelled one for the same employee on the same day
+is rejected with `400`. Touching times (one ends at 17:00, the next starts at 17:00) are allowed.
+Cancelled rows never block anything.
+
+## Response
 
 ```json
-{ "start": "2026-10-19T14:00:00Z", "end": "2026-10-19T22:00:00Z", "headcount_needed": 2, "notes": "Opening" }
+{
+  "id": 12, "task_name": "Register", "employee": 4, "employee_name": "Eve Worker",
+  "shift_date": "2026-10-19", "start_time": "09:00:00", "end_time": "17:00:00",
+  "status": "scheduled", "notes": "Opening",
+  "created_at": "2026-10-19T22:40:00Z", "modified_at": "2026-10-19T22:40:00Z"
+}
 ```
 
-- `start`, `end` required, ISO 8601 datetimes (UTC `Z` recommended).
-- `end` must be after `start`; both must fall inside the schedule's week
-  (Monday 00:00 to the following Monday 00:00 in the server timezone).
-- `headcount_needed` optional, integer ≥ 1, default 1. `notes` optional, max 255 chars.
-- `schedule` in responses is the parent schedule id (read-only).
+The list endpoint returns a plain JSON array of these objects.
+
+## Supporting tables added with it
+
+`Company`, `Department` and `EmployeeProfile` (from the diagram) exist so `employee` has something to point at.
+There are no API endpoints for them yet. Create them in the Django admin (`/admin/`).
+`EmployeeProfile.role` uses `ceo` / `manager` / `employee`.
 
 ## Not included yet
 
-- Assigning employees to shifts (`ShiftAssignment`) and a Department link on schedules.
-- Per-role / per-owner access scoping (Phase 4). For now any authenticated user can access every schedule.
+- Access scoping by role or department. For now any authenticated user can access every schedule.
+- Compatibility, availability, time-off and project tables from the diagram.
 
 ## Tests
 
-```bash
-cd backend && SECRET_KEY=dev DEBUG=True python manage.py test
-# or: podman-compose exec backend python manage.py test
+```powershell
+cd backend
+$env:SECRET_KEY = "dev-secret-key-change-me-at-least-32-characters"; $env:DEBUG = "True"
+python manage.py test
 ```

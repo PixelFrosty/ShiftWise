@@ -4,11 +4,12 @@ import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
 
-dependencies = [
+class Migration(migrations.Migration):
+
+    dependencies = [
         ("api", "0001_initial"),
     ]
 
-class Migration(migrations.Migration):
     operations = [
         migrations.CreateModel(
             name="Company",

@@ -5,6 +5,10 @@ from rest_framework_simplejwt.views import (TokenObtainPairView, TokenRefreshVie
 
 router = DefaultRouter()
 router.register('schedules', views.ScheduleViewSet, basename='schedule')
+router.register('compatibility', views.CompatibilityScoreViewSet, basename='compatibility')
+router.register('availability', views.AvailabilitySlotViewSet, basename='availability')
+router.register('time-off', views.TimeOffRequestViewSet, basename='time-off')
+router.register('projects', views.ProjectViewSet, basename='project')
 
 urlpatterns = [
     path('test/', views.test, name='test_api'),
@@ -12,9 +16,4 @@ urlpatterns = [
     path('login/', TokenObtainPairView.as_view(), name='login_api'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh_api'),
     path('logout/', TokenBlacklistView.as_view(), name='logout_api'),
-    path('schedules/<int:schedule_pk>/shifts/',
-         views.ShiftViewSet.as_view({'get': 'list', 'post': 'create'}), name='shift-list'),
-    path('schedules/<int:schedule_pk>/shifts/<int:pk>/', views.ShiftViewSet.as_view(
-        {'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}),
-        name='shift-detail'),
 ] + router.urls
