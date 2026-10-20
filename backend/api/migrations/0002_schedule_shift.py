@@ -4,41 +4,365 @@ import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
 
-
-class Migration(migrations.Migration):
-
-    dependencies = [
-        ('api', '0001_initial'),
+dependencies = [
+        ("api", "0001_initial"),
     ]
 
+class Migration(migrations.Migration):
     operations = [
         migrations.CreateModel(
-            name='Schedule',
+            name="Company",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=100)),
-                ('week_start', models.DateField()),
-                ('status', models.CharField(choices=[('draft', 'Draft'), ('published', 'Published')], default='draft', max_length=10)),
-                ('date_created', models.DateTimeField(auto_now_add=True)),
-                ('date_modified', models.DateTimeField(auto_now=True)),
-                ('created_by', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='schedules_created', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("modified_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'ordering': ['-week_start', 'name'],
+                "verbose_name_plural": "companies",
             },
         ),
         migrations.CreateModel(
-            name='Shift',
+            name="Department",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('start', models.DateTimeField()),
-                ('end', models.DateTimeField()),
-                ('headcount_needed', models.PositiveSmallIntegerField(default=1)),
-                ('notes', models.CharField(blank=True, max_length=255)),
-                ('schedule', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='shifts', to='api.schedule')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "company",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="departments",
+                        to="api.company",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("modified_at", models.DateTimeField(auto_now=True)),
+
+            ],
+        ),
+        migrations.CreateModel(
+            name="EmployeeProfile",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="employee_profile",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "company",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="employees",
+                        to="api.company",
+                    ),
+                ),
+                (
+                    "department",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="employees",
+                        to="api.department",
+                    ),
+                ),
+                (
+                    "role",
+                    models.CharField(
+                        choices=[
+                            ("ceo", "CEO"),
+                            ("manager", "Manager"),
+                            ("employee", "Employee"),
+                        ],
+                        default="employee",
+                        max_length=10,
+                    ),
+                ),
+                ("position", models.CharField(blank=True, max_length=255)),
+                (
+                    "productivity_score",
+                    models.DecimalField(
+                        blank=True, decimal_places=2, max_digits=5, null=True
+                    ),
+                ),
+                (
+                    "pay_rate",
+                    models.DecimalField(
+                        blank=True, decimal_places=2, max_digits=8, null=True
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("modified_at", models.DateTimeField(auto_now=True)),
+            ],
+        ),
+
+        migrations.CreateModel(
+            name="CompatibilityScore",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "employee_a",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="compatibility_as_a",
+                        to="api.employeeprofile",
+                    ),
+                ),
+                (
+                    "employee_b",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="compatibility_as_b",
+                        to="api.employeeprofile",
+                    ),
+                ),
+                (
+                    "score",
+                    models.DecimalField(
+                        decimal_places=2,
+                        max_digits=4,
+                        validators=[
+                            django.core.validators.MinValueValidator(0),
+                            django.core.validators.MaxValueValidator(10),
+                        ],
+                    ),
+                ),
+                (
+                    "rated_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="compatibility_ratings",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'ordering': ['start', 'end'],
+                "ordering": ["employee_a_id", "employee_b_id"],
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=("employee_a", "employee_b"),
+                        name="unique_compatibility_pair",
+                    ),
+                    models.CheckConstraint(
+                        condition=models.Q(("employee_a__lt", models.F("employee_b"))),
+                        name="compatibility_pair_ordered",
+                    ),
+                ],
+            },
+        ),
+
+        migrations.CreateModel(
+            name="Schedule",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("task_name", models.CharField(max_length=255)),
+                (
+                    "employee",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="schedules",
+                        to="api.employeeprofile",
+                    ),
+                ),
+                ("shift_date", models.DateField()),
+                ("start_time", models.TimeField()),
+                ("end_time", models.TimeField()),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("scheduled", "Scheduled"),
+                            ("completed", "Completed"),
+                            ("cancelled", "Cancelled"),
+                        ],
+                        default="scheduled",
+                        max_length=10,
+                    ),
+                ),
+                ("notes", models.TextField(blank=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("modified_at", models.DateTimeField(auto_now=True)),
+            ],
+            options={
+                "ordering": ["shift_date", "start_time", "id"],
+            },
+        ),
+        migrations.CreateModel(
+            name="AvailabilitySlot",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "employee",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="availability_slots",
+                        to="api.employeeprofile",
+                    ),
+                ),
+                (
+                    "day_of_week",
+                    models.SmallIntegerField(
+                        choices=[
+                            (0, "Monday"),
+                            (1, "Tuesday"),
+                            (2, "Wednesday"),
+                            (3, "Thursday"),
+                            (4, "Friday"),
+                            (5, "Saturday"),
+                            (6, "Sunday"),
+                        ]
+                    ),
+                ),
+                ("start_time", models.TimeField()),
+                ("end_time", models.TimeField()),
+            ],
+            options={
+                "ordering": ["employee_id", "day_of_week", "start_time"],
+            },
+        ),
+        migrations.CreateModel(
+            name="Project",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "company",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="projects",
+                        to="api.company",
+                    ),
+                ),
+                (
+                    "department",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="projects",
+                        to="api.department",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                ("description", models.TextField(blank=True)),
+                (
+                    "priority",
+                    models.CharField(
+                        choices=[
+                            ("low", "Low"),
+                            ("medium", "Medium"),
+                            ("high", "High"),
+                        ],
+                        default="medium",
+                        max_length=10,
+                    ),
+                ),
+                ("is_active", models.BooleanField(default=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("modified_at", models.DateTimeField(auto_now=True)),
+            ],
+            options={
+                "ordering": ["name", "id"],
+            },
+        ),
+        migrations.CreateModel(
+            name="TimeOffRequest",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "employee",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="time_off_requests",
+                        to="api.employeeprofile",
+                    ),
+                ),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField()),
+                ("reason", models.TextField(blank=True)),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("pending", "Pending"),
+                            ("approved", "Approved"),
+                            ("denied", "Denied"),
+                        ],
+                        default="pending",
+                        max_length=10,
+                    ),
+                ),
+                ("requested_at", models.DateTimeField(auto_now_add=True)),
+            ],
+            options={
+                "ordering": ["start_date", "id"],
             },
         ),
     ]
