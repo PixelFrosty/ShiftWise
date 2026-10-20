@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -17,6 +18,11 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+    @property
+    def employee_profile(self):
+        """Backwards compatibility helper: returns the first employee profile if one exists."""
+        return self.employee_profiles.first()
 
     def create_user(self, email, username, first_name, last_name, date_of_birth, password):
         User.objects.create_user(username, email, password, first_name, last_name, date_of_birth)
@@ -50,7 +56,7 @@ class EmployeeProfile(models.Model):
         MANAGER = 'manager', 'Manager'
         EMPLOYEE = 'employee', 'Employee'
 
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employee_profile')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='employee_profiles')
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='employees')
     department = models.ForeignKey(Department, on_delete=models.PROTECT, related_name='employees')
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.EMPLOYEE)
@@ -59,6 +65,22 @@ class EmployeeProfile(models.Model):
     pay_rate = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        super().clean()
+        if self.pk:
+            orig_company_id = EmployeeProfile.objects.filter(pk=self.pk).values_list('company_id', flat=True).first()
+            if orig_company_id is not None and self.company_id and orig_company_id != self.company_id:
+                raise ValidationError(
+                    {'company': 'Company cannot be changed once assigned. Create a new employee profile instead.'}
+                )
+        if self.company_id and self.department_id:
+            if self.department.company_id != self.company_id:
+                raise ValidationError({'department': 'Department does not belong to the selected company.'})
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.user.get_full_name() or self.user.email

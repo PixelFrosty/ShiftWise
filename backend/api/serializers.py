@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import (AvailabilitySlot, CompatibilityScore, Project, Schedule, TimeOffRequest, User)
+from .models import (AvailabilitySlot, CompatibilityScore, EmployeeProfile, Project, Schedule, TimeOffRequest, User)
 
 class UserSerializer(serializers.ModelSerializer):
 
@@ -12,6 +12,31 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         return user
+
+
+class EmployeeProfileSerializer(serializers.ModelSerializer):
+    employee_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmployeeProfile
+        fields = ['id', 'user', 'employee_name', 'company', 'department', 'role', 'position',
+                  'productivity_score', 'pay_rate', 'created_at', 'modified_at']
+        read_only_fields = ['created_at', 'modified_at']
+
+    def get_employee_name(self, obj):
+        return obj.user.get_full_name() or obj.user.email
+
+    def validate(self, attrs):
+        if self.instance and self.instance.pk and 'company' in attrs:
+            if attrs['company'].pk != self.instance.company_id:
+                raise serializers.ValidationError(
+                    {'company': 'Company cannot be changed once assigned. Create a new employee profile instead.'}
+                )
+        company = attrs.get('company', getattr(self.instance, 'company', None))
+        department = attrs.get('department', getattr(self.instance, 'department', None))
+        if company and department and department.company_id != company.pk:
+            raise serializers.ValidationError({'department': 'Department does not belong to this company.'})
+        return attrs
 
 
 class ScheduleSerializer(serializers.ModelSerializer):
@@ -44,7 +69,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
         employee, day, status = current('employee'), current('shift_date'), current('status')
         if employee and day and start and end and status != Schedule.Status.CANCELLED:
             clashes = Schedule.objects.filter(
-                employee=employee, shift_date=day, start_time__lt=end, end_time__gt=start,
+                employee__user=employee.user, shift_date=day, start_time__lt=end, end_time__gt=start,
             ).exclude(status=Schedule.Status.CANCELLED)
             if self.instance:
                 clashes = clashes.exclude(pk=self.instance.pk)
@@ -80,7 +105,7 @@ class CompatibilityScoreSerializer(serializers.ModelSerializer):
         a = attrs.get('employee_a', getattr(self.instance, 'employee_a', None))
         b = attrs.get('employee_b', getattr(self.instance, 'employee_b', None))
         if a and b:
-            if a.pk == b.pk:
+            if a.pk == b.pk or a.user_id == b.user_id:
                 raise serializers.ValidationError('An employee cannot be rated against themselves.')
             if a.company_id != b.company_id:
                 raise serializers.ValidationError('Both employees must belong to the same company.')
