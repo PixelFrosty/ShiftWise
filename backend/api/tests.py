@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.test import APITestCase
 from rest_framework import status
@@ -7,7 +8,9 @@ from django.urls import reverse
 # Create your tests here.
 # pyright: reportAttributeAccessIssue=false
 
-from .models import User
+from .admin import EmployeeProfileForm
+from .models import Company, Department, EmployeeProfile, User
+from .serializers import EmployeeProfileSerializer
 
 class UserModelTests(TestCase):
     def test_create(self):
@@ -26,6 +29,138 @@ class UserModelTests(TestCase):
         self.assertEqual(U1.last_name, 'user')
         self.assertEqual(U1.date_of_birth, '2000-02-02')
         self.assertTrue(U1.check_password('testpassword'))
+
+    def test_user_can_have_multiple_employee_profiles(self):
+        user = User.objects.create_user(
+            username='multi',
+            email='multi@example.com',
+            first_name='Multi',
+            last_name='Jobs',
+            password='testpassword',
+            date_of_birth='1990-01-01'
+        )
+        company1 = Company.objects.create(name='Company 1')
+        dept1 = Department.objects.create(company=company1, name='Dept 1')
+        company2 = Company.objects.create(name='Company 2')
+        dept2 = Department.objects.create(company=company2, name='Dept 2')
+
+        job1 = EmployeeProfile.objects.create(user=user, company=company1, department=dept1, position='Cashier')
+        job2 = EmployeeProfile.objects.create(user=user, company=company2, department=dept2, position='Stocker')
+
+        self.assertEqual(user.employee_profiles.count(), 2)
+        self.assertIn(job1, user.employee_profiles.all())
+        self.assertIn(job2, user.employee_profiles.all())
+        self.assertEqual(user.employee_profile, job1)
+
+
+class EmployeeProfileDepartmentCompanyTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='worker', email='worker@example.com', first_name='Work', last_name='Er',
+            password='pass', date_of_birth='1990-01-01')
+        self.company1 = Company.objects.create(name='Company 1')
+        self.dept1 = Department.objects.create(company=self.company1, name='Dept 1')
+        self.company2 = Company.objects.create(name='Company 2')
+        self.dept2 = Department.objects.create(company=self.company2, name='Dept 2')
+
+    def test_matching_company_and_department_succeeds(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        self.assertEqual(profile.company, self.company1)
+        self.assertEqual(profile.department, self.dept1)
+
+    def test_mismatched_department_and_company_rejected_on_create(self):
+        with self.assertRaises(ValidationError) as ctx:
+            EmployeeProfile.objects.create(
+                user=self.user, company=self.company1, department=self.dept2, position='Cashier')
+        self.assertIn('department', ctx.exception.message_dict)
+
+    def test_mismatched_department_and_company_rejected_on_save(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        profile.department = self.dept2
+        with self.assertRaises(ValidationError) as ctx:
+            profile.save()
+        self.assertIn('department', ctx.exception.message_dict)
+
+    def test_admin_form_filters_department_queryset_by_company(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        form = EmployeeProfileForm(instance=profile)
+        self.assertIn(self.dept1, form.fields['department'].queryset)
+        self.assertNotIn(self.dept2, form.fields['department'].queryset)
+
+    def test_admin_form_rejects_mismatched_department(self):
+        data = {
+            'user': self.user.pk,
+            'company': self.company1.pk,
+            'department': self.dept2.pk,
+            'role': EmployeeProfile.Role.EMPLOYEE,
+            'position': 'Cashier',
+        }
+        form = EmployeeProfileForm(data=data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('department', form.errors)
+
+    def test_serializer_rejects_mismatched_department(self):
+        data = {
+            'user': self.user.pk,
+            'company': self.company1.pk,
+            'department': self.dept2.pk,
+            'role': 'employee',
+        }
+        serializer = EmployeeProfileSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('department', serializer.errors)
+
+    def test_company_cannot_be_changed_on_existing_profile(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        profile.company = self.company2
+        with self.assertRaises(ValidationError) as ctx:
+            profile.save()
+        self.assertIn('company', ctx.exception.message_dict)
+
+    def test_profile_can_update_other_fields_without_changing_company(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        dept1_b = Department.objects.create(company=self.company1, name='Dept 1B')
+        profile.position = 'Lead Cashier'
+        profile.department = dept1_b
+        profile.role = EmployeeProfile.Role.MANAGER
+        profile.save()
+        profile.refresh_from_db()
+        self.assertEqual(profile.position, 'Lead Cashier')
+        self.assertEqual(profile.department, dept1_b)
+        self.assertEqual(profile.role, EmployeeProfile.Role.MANAGER)
+        self.assertEqual(profile.company, self.company1)
+
+    def test_admin_form_disables_company_for_existing_profile(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        form = EmployeeProfileForm(instance=profile)
+        self.assertTrue(form.fields['company'].disabled)
+
+    def test_admin_form_rejects_tampered_company_change(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        data = {
+            'user': self.user.pk,
+            'company': self.company2.pk,
+            'department': self.dept2.pk,
+            'role': EmployeeProfile.Role.EMPLOYEE,
+            'position': 'Cashier',
+        }
+        form = EmployeeProfileForm(instance=profile, data=data)
+        self.assertFalse(form.is_valid())
+        self.assertIn('company', form.errors)
+
+    def test_serializer_rejects_company_change_on_existing_profile(self):
+        profile = EmployeeProfile.objects.create(
+            user=self.user, company=self.company1, department=self.dept1, position='Cashier')
+        serializer = EmployeeProfileSerializer(instance=profile, data={'company': self.company2.pk}, partial=True)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('company', serializer.errors)
 
 class ApiSignupTest(APITestCase):
     def test_signupApi(self):
@@ -269,6 +404,16 @@ class ScheduleOverlapTests(ScheduleApiBase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('non_field_errors', response.data)
 
+    def test_overlap_different_profile_same_user_rejected(self):
+        self.make_schedule()
+        second_job = EmployeeProfile.objects.create(
+            user=self.employee.user, company=self.employee.company, department=self.employee.department,
+            position='Second Job')
+        response = self.client.post(
+            self.list_url, self.payload(employee=second_job.pk, start_time='16:00', end_time='20:00'), format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('non_field_errors', response.data)
+
     def test_back_to_back_is_allowed(self):
         self.make_schedule()
         response = self.client.post(self.list_url, self.payload(start_time='17:00', end_time='20:00'), format='json')
@@ -417,6 +562,13 @@ class CompatibilityCreateTests(CompatibilityApiBase):
     def test_same_employee_rejected(self):
         response = self.client.post(
             self.list_url, {'employee_a': self.a.pk, 'employee_b': self.a.pk, 'score': 5}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_same_user_different_profile_rejected(self):
+        second_job = EmployeeProfile.objects.create(
+            user=self.a.user, company=self.a.company, department=self.a.department, position='Second Job')
+        response = self.client.post(
+            self.list_url, {'employee_a': self.a.pk, 'employee_b': second_job.pk, 'score': 5}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_different_company_rejected(self):
