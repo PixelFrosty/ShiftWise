@@ -6,7 +6,7 @@ ShiftWise is a web-based tool designed to reduce the time and effort managers sp
 
 - Django
 - Angular
-- SQLite (to be replaced with PostGre)
+- PostgreSQL
 - Podman
 
 # Installation & Development
