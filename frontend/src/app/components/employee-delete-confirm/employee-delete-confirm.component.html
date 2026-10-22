@@ -1,0 +1,46 @@
+@if (employee) {
+  <div class="max-w-md mx-auto my-12 px-4">
+    <div class="bg-white p-6 sm:p-8 rounded-xl border border-slate-200 shadow-sm text-center">
+      <!-- Warning Icon -->
+      <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4 text-xl font-bold">
+        !
+      </div>
+
+      <h1 class="text-xl font-bold text-slate-900 mb-2">Delete Employee?</h1>
+
+      <p class="text-sm text-slate-500 mb-3">
+        Are you sure you want to remove
+        <span class="font-semibold text-slate-800">{{ employee.name }}</span>
+        ({{ employee.position }})?
+      </p>
+
+      <!-- Cascading deletion warning -->
+      <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mb-6 text-left">
+        <p class="font-semibold mb-1">This action will also remove:</p>
+        <ul class="list-disc list-inside space-y-0.5 text-xs">
+          <li>All shift assignments for this employee</li>
+          <li>All pairwise compatibility ratings involving this employee</li>
+        </ul>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex justify-center space-x-3">
+        <a routerLink="/employees"
+           class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md text-sm font-medium transition no-underline cursor-pointer">
+          Cancel
+        </a>
+        <button
+          type="button"
+          (click)="onConfirmDelete()"
+          [disabled]="isDeleting"
+          class="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md text-sm font-semibold shadow-sm transition cursor-pointer">
+          @if (isDeleting) {
+            Deleting…
+          } @else {
+            Yes, Delete
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}
