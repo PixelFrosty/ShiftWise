@@ -1,4 +1,19 @@
 services:
+    db:
+        image: docker.io/library/postgres:16-alpine
+        restart: unless-stopped
+        env_file:
+            - ".env"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data:z
+        networks:
+            - backend_net
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
     backend:
         build:
             context: ./backend
@@ -8,10 +23,15 @@ services:
             - ".env"
         volumes:
             - ./backend:/app/backend
-            - ./database:/app/database:z
         working_dir: /app/backend
         environment:
             - PYTHONUNBUFFERED=1
+        networks:
+            - frontend_net
+            - backend_net
+        depends_on:
+            db:
+                condition: service_healthy
 
     frontend:
         build:
@@ -21,5 +41,14 @@ services:
         volumes:
             - ./frontend:/app
             - /app/node_modules
+        networks:
+            - frontend_net
         depends_on:
             - backend
+
+volumes:
+    postgres_data:
+
+networks:
+    frontend_net:
+    backend_net:
