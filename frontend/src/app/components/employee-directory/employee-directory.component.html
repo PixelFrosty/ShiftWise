@@ -1,0 +1,132 @@
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900">Employee Directory</h1>
+      <p class="text-sm text-slate-500 mt-1">Manage personnel, productivity ratings, and pay rates</p>
+    </div>
+    <div class="flex items-center space-x-3">
+      <a routerLink="/compatibility" class="inline-flex items-center px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition no-underline">
+        Pairwise Compatibility
+      </a>
+      <a routerLink="/employees/add" class="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition no-underline">
+        + Add Employee
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+    <form (ngSubmit)="$event.preventDefault()" class="flex flex-col sm:flex-row gap-3">
+      <input
+        type="text"
+        [(ngModel)]="searchQuery"
+        name="searchQuery"
+        placeholder="Search by name or position..."
+        class="form-input flex-1" />
+
+      <select
+        [(ngModel)]="selectedDeptId"
+        name="selectedDeptId"
+        class="form-select sm:w-64">
+        <option value="">All Departments</option>
+        @for (dept of departments; track dept.id) {
+          <option [value]="dept.id">{{ dept.name }}</option>
+        }
+      </select>
+
+      @if (hasActiveFilters) {
+        <button
+          type="button"
+          (click)="clearFilters()"
+          class="px-4 py-2 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-lg text-sm font-medium transition text-center cursor-pointer">
+          Clear
+        </button>
+      }
+    </form>
+  </div>
+
+  <!-- Employee Table -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm text-slate-600">
+        <thead class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          <tr>
+            <th class="px-6 py-3">Employee</th>
+            <th class="px-6 py-3">Department</th>
+            <th class="px-6 py-3">Role</th>
+            <th class="px-6 py-3">Productivity Score</th>
+            <th class="px-6 py-3">Pay Rate</th>
+            <th class="px-6 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          @for (emp of filteredEmployees; track emp.id) {
+            <tr class="hover:bg-slate-50 transition">
+              <!-- Employee Name & Position -->
+              <td class="px-6 py-4">
+                <div class="font-semibold text-slate-900">{{ emp.name }}</div>
+                <div class="text-xs text-slate-500">{{ emp.position }}</div>
+              </td>
+
+              <!-- Department Badge -->
+              <td class="px-6 py-4">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                  {{ emp.department.name }}
+                </span>
+              </td>
+
+              <!-- Role Badge -->
+              <td class="px-6 py-4">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      [class]="getRoleBadgeClasses(emp.role)">
+                  {{ getRoleLabel(emp.role) }}
+                </span>
+              </td>
+
+              <!-- Productivity Score + Bar -->
+              <td class="px-6 py-4">
+                @if (emp.productivityScore !== null) {
+                  <div class="flex items-center space-x-2">
+                    <span class="font-bold text-slate-800">{{ emp.productivityScore }}</span>
+                    <div class="w-24 bg-slate-200 rounded-full h-2">
+                      <div class="h-2 rounded-full transition-all"
+                           [class]="getProductivityBarColor(emp.productivityScore)"
+                           [style.width]="getProductivityBarWidth(emp.productivityScore)">
+                      </div>
+                    </div>
+                  </div>
+                } @else {
+                  <span class="text-slate-400">N/A</span>
+                }
+              </td>
+
+              <!-- Pay Rate -->
+              <td class="px-6 py-4 font-mono text-xs">
+                {{ formatPayRate(emp.payRate) }}
+              </td>
+
+              <!-- Actions -->
+              <td class="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                <a [routerLink]="['/employees', emp.id, 'edit']"
+                   class="text-xs font-medium text-emerald-600 hover:text-emerald-800">
+                  Edit
+                </a>
+                <a [routerLink]="['/employees', emp.id, 'delete']"
+                   class="text-xs font-medium text-rose-600 hover:text-rose-800">
+                  Delete
+                </a>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="px-6 py-8 text-center text-slate-500">
+                No employees found matching the criteria. Click "+ Add Employee" above.
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
