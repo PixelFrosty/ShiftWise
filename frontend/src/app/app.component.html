@@ -2,9 +2,9 @@
   <!-- Top Navigation Header -->
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between h-16">
-        <!-- Logo & Navigation Links -->
-        <div class="flex items-center space-x-4 sm:space-x-8">
+      <div class="flex items-center justify-between h-16 relative">
+        <!-- Left: Hamburger Menu & Navigation Links -->
+        <div class="flex items-center space-x-4">
           <!-- Hamburger Menu Dropdown -->
           <div class="relative">
             <button (click)="toggleMenu()"
@@ -34,48 +34,51 @@
             }
           </div>
 
-          <a routerLink="/dashboard" class="flex items-center space-x-2 text-xl font-bold text-slate-800 tracking-tight no-underline">
-            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600 text-white font-black text-lg">S</span>
-            <span>Shift<span class="text-emerald-600">Wise</span></span>
-          </a>
-
           @if (isAuthenticated) {
             <nav class="hidden md:flex space-x-4">
               <a routerLink="/dashboard"
                  routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
                  [routerLinkActiveOptions]="{ exact: true }"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition">
+                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
                 Dashboard
               </a>
 
               @if (isManagerOrCeo) {
                 <a routerLink="/employees"
                    routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition">
+                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
                   Employees
                 </a>
                 <a routerLink="/compatibility"
                    routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition">
+                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
                   Compatibility
                 </a>
               }
 
               <a routerLink="/schedules"
                  routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition">
+                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
                 Schedules
               </a>
               <a routerLink="/time-off"
                  routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition">
+                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
                 Time Off
               </a>
             </nav>
           }
         </div>
 
-        <!-- User Controls / Auth Status -->
+        <!-- Center: ShiftWise Logo (Takes you to landing page) -->
+        <div class="absolute left-1/2 transform -translate-x-1/2">
+          <a routerLink="/" class="flex items-center space-x-2 text-xl font-bold text-slate-800 tracking-tight no-underline">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600 text-white font-black text-lg">S</span>
+            <span>Shift<span class="text-emerald-600">Wise</span></span>
+          </a>
+        </div>
+
+        <!-- Right: User Controls / Auth Status -->
         <div class="flex items-center space-x-4">
           @if (isAuthenticated && currentUser) {
             <div class="flex items-center space-x-3">
@@ -96,8 +99,8 @@
               </button>
             </div>
           } @else {
-            <a routerLink="/login" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition shadow-sm no-underline">
-              Sign In
+            <a routerLink="/register" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition shadow-sm no-underline">
+              Sign Up
             </a>
           }
         </div>
