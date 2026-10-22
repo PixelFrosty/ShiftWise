@@ -13,6 +13,7 @@ router.register('projects', views.ProjectViewSet, basename='project')
 urlpatterns = [
     path('test/', views.test, name='test_api'),
     path('signup/', views.sign_up, name='signup_api'),
+    path('signup-check/', views.signup_check, name='signup_check'),
     path('login/', TokenObtainPairView.as_view(), name='login_api'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh_api'),
     path('logout/', TokenBlacklistView.as_view(), name='logout_api'),
