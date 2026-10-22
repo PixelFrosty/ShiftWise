@@ -1,6 +1,10 @@
 import { Component } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
-import { AuthService, UserProfile } from './services/auth.service';
+
+export interface UserProfile {
+  username: string;
+  role: 'CEO' | 'MANAGER' | 'EMPLOYEE';
+}
 
 export interface NotificationMessage {
   id: string;
@@ -18,23 +22,13 @@ export interface NotificationMessage {
 export class AppComponent {
   title = 'ShiftWise';
 
+  // Current user state (can be wired to an AuthService)
+  currentUser: UserProfile | null = null;
+  isAuthenticated = false;
+
   notifications: NotificationMessage[] = [];
 
   isMenuOpen = false;
-
-  constructor(public auth: AuthService) {}
-
-  get currentUser(): UserProfile | null {
-    return this.auth.currentUser;
-  }
-
-  get isAuthenticated(): boolean {
-    return this.auth.isAuthenticated;
-  }
-
-  get isManagerOrCeo(): boolean {
-    return this.auth.isManagerOrCeo;
-  }
 
   toggleMenu(): void {
     this.isMenuOpen = !this.isMenuOpen;
@@ -44,11 +38,16 @@ export class AppComponent {
     this.isMenuOpen = false;
   }
 
+  get isManagerOrCeo(): boolean {
+    return this.currentUser?.role === 'CEO' || this.currentUser?.role === 'MANAGER';
+  }
+
   dismissNotification(id: string): void {
     this.notifications = this.notifications.filter(n => n.id !== id);
   }
 
   onLogout(): void {
-    this.auth.logout();
+    this.currentUser = null;
+    this.isAuthenticated = false;
   }
 }
