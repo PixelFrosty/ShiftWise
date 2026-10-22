@@ -1,0 +1,52 @@
+<header class="navbar">
+    <button class="menu-btn" (click)="toggleMenu()" aria-label="Toggle navigation menu">
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+    </button>
+
+    <h1 class="brand-title">Shiftwise</h1>
+
+    @if (isMenuOpen) {
+    <div class="dropdown-menu">
+        <a routerLink="/" class="menu-item">Log In</a>
+        <a href="#" class="menu-item">About Us</a>
+        <a href="#" class="menu-item">Contact</a>
+    </div>
+    }
+</header>
+
+<main class="page-container">
+    <div class="card">
+        <h2 class="card-title">Create New Account</h2>
+
+        <p class="card-subtitle">
+            Already Registered? <a routerLink="/" class="login-link">Click here to log in</a>
+        </p>
+
+        @if (errorMessage) {
+        <div class="error-banner">
+            {{ errorMessage }}
+        </div>
+        }
+
+        <form class="register-form" (ngSubmit)="onSubmit($event)">
+            <div class="form-group">
+                <label for="first-name">First Name</label>
+                <input type="text" id="first-name" class="form-input" />
+            </div>
+
+            <div class="form-group">
+                <label for="last-name">Last Name</label>
+                <input type="text" id="last-name" class="form-input" />
+            </div>
+
+            <div class="form-group">
+                <label for="phone">Date of Birth</label>
+                <input type="text" id="dob" class="form-input" placeholder="" />
+            </div>
+
+            <button type="submit" class="submit-btn">Complete Registration</button>
+        </form>
+    </div>
+</main>

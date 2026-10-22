@@ -1,0 +1,48 @@
+<header class="navbar">
+    <button class="menu-btn" (click)="toggleMenu()" aria-label="Toggle navigation menu">
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+    </button>
+    <h1 class="brand-title">Shiftwise</h1>
+
+    @if (isMenuOpen) {
+    <div class="dropdown-menu">
+        <a href="#" class="menu-item">About Us</a>
+        <a href="#" class="menu-item">Contact</a>
+    </div>
+    }
+</header>
+
+<main class="page-container">
+    <div class="login-card">
+        <h2 class="card-title">Log In</h2>
+
+        <form class="login-form" (ngSubmit)="onLogin($event)">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" class="form-input" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" class="form-input" />
+            </div>
+
+            @if (hasError) {
+            <div class="error-banner">
+                {{ errorMessage }}
+            </div>
+            }
+
+            <div class="form-links">
+                <p class="signup-text">
+                    Don't have an account? <a routerLink="/register" class="signup-btn">Click here</a>
+                </p>
+                <a routerLink="/forgot-password" class="inline-link forgot-link">Forgot password?</a>
+            </div>
+
+            <button type="submit" class="submit-btn">Log In</button>
+        </form>
+    </div>
+</main>

@@ -1,0 +1,71 @@
+<header class="navbar">
+    <button class="menu-btn" (click)="toggleMenu()" aria-label="Toggle navigation menu">
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+        <span class="hamburger-icon"></span>
+    </button>
+
+    <h1 class="brand-title">Shiftwise</h1>
+
+    @if (isMenuOpen) {
+    <div class="dropdown-menu">
+        <a routerLink="/" class="menu-item">Log In</a>
+        <a href="#" class="menu-item">About Us</a>
+        <a href="#" class="menu-item">Contact</a>
+    </div>
+    }
+</header>
+
+<main class="page-container">
+    <div class="card">
+        <h2 class="card-title">Create New Account</h2>
+
+        <p class="card-subtitle">
+            Already Registered? <a routerLink="/" class="login-link">Click here to log in</a>
+        </p>
+
+        @if (hasEmailError) {
+        <div class="error-banner">
+            The email entered already exists, please try again.<br />
+            Already Registered? <a routerLink="/" class="banner-link">Click here to log in</a>
+        </div>
+        }
+
+        @if (hasUsernameError) {
+        <div class="error-banner">
+            The username entered already exists, please try again.<br />
+            Already Registered? <a routerLink="/" class="banner-link">Click here to log in</a>
+        </div>
+        }
+
+        @if (hasPasswordError) {
+        <div class="error-banner">
+            Passwords do not match. Please try again.<br />
+        </div>
+        }
+
+        <form class="register-form" (ngSubmit)="onSubmit($event)">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" class="form-input" />
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" class="form-input" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" class="form-input" />
+            </div>
+
+            <div class="form-group">
+                <label for="confirm-password">Confirm Password</label>
+                <input type="password" id="confirm-password" class="form-input" />
+            </div>
+
+            <button type="submit" class="submit-btn">Sign Up</button>
+        </form>
+    </div>
+</main>
