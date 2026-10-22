@@ -9,9 +9,12 @@
       <a routerLink="/compatibility" class="inline-flex items-center px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition no-underline">
         Pairwise Compatibility
       </a>
-      <a routerLink="/employees/add" class="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition no-underline">
+      <button
+        type="button"
+        (click)="openAddModal()"
+        class="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition border-0 cursor-pointer">
         + Add Employee
-      </a>
+      </button>
     </div>
   </div>
 
@@ -133,6 +136,133 @@
       </table>
     </div>
   </div>
+
+  <!-- Add Employee Popup Modal Window -->
+  @if (isAddModalOpen) {
+    <!-- Backdrop overlay -->
+    <div class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50"
+         (click)="closeAddModal()">
+      <!-- Modal card -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-xl max-w-lg w-full p-6 text-left"
+           (click)="$event.stopPropagation()">
+        
+        <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900">Add New Employee</h2>
+            <p class="text-xs text-slate-500">Enter employee profile details and productivity parameters</p>
+          </div>
+          <button
+            type="button"
+            (click)="closeAddModal()"
+            class="text-slate-400 hover:text-slate-600 text-xl font-bold bg-transparent border-0 cursor-pointer p-1 leading-none">
+            &times;
+          </button>
+        </div>
+
+        <form (ngSubmit)="saveNewEmployee()" class="space-y-4">
+          <!-- Full Name -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Full Name *</label>
+            <input
+              type="text"
+              [(ngModel)]="newEmployee.name"
+              name="addName"
+              placeholder="e.g. Jane Doe"
+              required
+              class="form-input" />
+          </div>
+
+          <!-- Position & Department -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Position / Job Title *</label>
+              <input
+                type="text"
+                [(ngModel)]="newEmployee.position"
+                name="addPosition"
+                placeholder="e.g. Senior Shift Lead"
+                required
+                class="form-input" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Department</label>
+              <select
+                [(ngModel)]="newEmployee.departmentId"
+                name="addDept"
+                class="form-select">
+                @for (d of departments; track d.id) {
+                  <option [value]="d.id">{{ d.name }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <!-- Role -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Role</label>
+            <select
+              [(ngModel)]="newEmployee.role"
+              name="addRole"
+              class="form-select">
+              <option value="employee">Employee</option>
+              <option value="manager">Manager</option>
+              <option value="ceo">CEO</option>
+            </select>
+          </div>
+
+          <!-- Productivity & Pay Rate -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Productivity Score (1.0 - 10.0)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="1"
+                max="10"
+                [(ngModel)]="newEmployee.productivityScore"
+                name="addProductivity"
+                placeholder="e.g. 7.5"
+                class="form-input" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Pay Rate ($/hr)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                [(ngModel)]="newEmployee.payRate"
+                name="addPayRate"
+                placeholder="e.g. 25.00"
+                class="form-input" />
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex justify-end space-x-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              (click)="closeAddModal()"
+              [disabled]="isAdding"
+              class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition cursor-pointer">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              [disabled]="isAdding || !newEmployee.name.trim() || !newEmployee.position.trim()"
+              class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold shadow-sm transition cursor-pointer flex items-center space-x-2">
+              @if (isAdding) {
+                <span>Adding…</span>
+              } @else {
+                <span>+ Add Employee</span>
+              }
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  }
 
   <!-- Edit Employee Popup Modal Window -->
   @if (editingEmployee) {

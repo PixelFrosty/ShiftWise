@@ -27,6 +27,15 @@ export interface EditEmployeeForm {
   payRate: number | null;
 }
 
+export interface AddEmployeeForm {
+  name: string;
+  position: string;
+  departmentId: number;
+  role: 'ceo' | 'manager' | 'employee';
+  productivityScore: number | null;
+  payRate: number | null;
+}
+
 @Component({
   selector: 'app-employee-directory',
   standalone: true,
@@ -45,6 +54,11 @@ export class EmployeeDirectoryComponent {
   // Edit modal state
   editingEmployee: EditEmployeeForm | null = null;
   isSavingEdit = false;
+
+  // Add modal state
+  isAddModalOpen = false;
+  isAdding = false;
+  newEmployee: AddEmployeeForm = this.getInitialAddForm();
 
   // Placeholder departments — replace with HttpClient call when API is ready
   departments: Department[] = [
@@ -65,6 +79,17 @@ export class EmployeeDirectoryComponent {
     { id: 7, name: 'Grace Kim',       position: 'Content Strategist',  department: { id: 2, name: 'Marketing' },        role: 'employee', productivityScore: 8.0,  payRate: 40.00 },
     { id: 8, name: 'Henry Patel',     position: 'DevOps Engineer',     department: { id: 1, name: 'Engineering' },      role: 'employee', productivityScore: 9.3,  payRate: 58.00 }
   ];
+
+  private getInitialAddForm(): AddEmployeeForm {
+    return {
+      name: '',
+      position: '',
+      departmentId: 1,
+      role: 'employee',
+      productivityScore: 7.0,
+      payRate: 25.00
+    };
+  }
 
   get filteredEmployees(): Employee[] {
     let result = this.employees;
@@ -194,6 +219,45 @@ export class EmployeeDirectoryComponent {
 
       this.isSavingEdit = false;
       this.editingEmployee = null;
+    }, 300);
+  }
+
+  // Add modal methods
+  openAddModal(): void {
+    this.newEmployee = this.getInitialAddForm();
+    this.isAddModalOpen = true;
+  }
+
+  closeAddModal(): void {
+    if (this.isAdding) return;
+    this.isAddModalOpen = false;
+  }
+
+  saveNewEmployee(): void {
+    if (!this.newEmployee.name.trim() || !this.newEmployee.position.trim()) return;
+    this.isAdding = true;
+
+    setTimeout(() => {
+      const dept = this.departments.find(d => d.id === Number(this.newEmployee.departmentId)) || {
+        id: Number(this.newEmployee.departmentId),
+        name: 'General'
+      };
+
+      const nextId = this.employees.length > 0 ? Math.max(...this.employees.map(e => e.id)) + 1 : 1;
+
+      const created: Employee = {
+        id: nextId,
+        name: this.newEmployee.name.trim(),
+        position: this.newEmployee.position.trim(),
+        department: dept,
+        role: this.newEmployee.role,
+        productivityScore: this.newEmployee.productivityScore !== null && this.newEmployee.productivityScore !== undefined ? Number(this.newEmployee.productivityScore) : null,
+        payRate: this.newEmployee.payRate !== null && this.newEmployee.payRate !== undefined ? Number(this.newEmployee.payRate) : null
+      };
+
+      this.employees.unshift(created);
+      this.isAdding = false;
+      this.isAddModalOpen = false;
     }, 300);
   }
 }
