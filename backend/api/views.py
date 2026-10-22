@@ -36,7 +36,7 @@ def signup_check(request):
     """
     Checks if an email or username has already been taken.
     Does not disclose which one is taken to protect user privacy.
-    Accepts input via GET query parameters: ?email=...&username=...
+    Requires both 'email' and 'username' query parameters.
     """
     email = request.query_params.get('email')
     username = request.query_params.get('username')
@@ -51,18 +51,13 @@ def signup_check(request):
         if not username:
             username = None
 
-    if not email and not username:
+    if not email or not username:
         return Response(
-            {'detail': "At least one of 'email' or 'username' must be provided."},
+            {'detail': "Both 'email' and 'username' must be provided."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    query = Q()
-    if email:
-        query |= Q(email__iexact=email)
-    if username:
-        query |= Q(username__iexact=username)
-
+    query = Q(email__iexact=email) | Q(username__iexact=username)
     is_taken = User.objects.filter(query).exists()
 
     if is_taken:

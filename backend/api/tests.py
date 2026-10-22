@@ -252,49 +252,37 @@ class SignupCheckApiTests(APITestCase):
             {'taken': False, 'message': 'Email and username are available.'}
         )
 
-    def test_available_with_email_only(self):
-        response = self.client.get(
-            self.url,
-            {'email': 'unique_email@example.com'}
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            response.data,
-            {'taken': False, 'message': 'Email and username are available.'}
-        )
-
-    def test_taken_with_email_only(self):
-        response = self.client.get(
-            self.url,
-            {'email': 'existing@example.com'}
-        )
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertEqual(
-            response.data,
-            {'taken': True, 'message': 'Email or username has already been taken.'}
-        )
-
-    def test_available_with_username_only(self):
+    def test_missing_email_returns_400(self):
         response = self.client.get(
             self.url,
             {'username': 'brand_new_username'}
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            response.data,
-            {'taken': False, 'message': 'Email and username are available.'}
-        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
 
-    def test_taken_with_username_only(self):
+    def test_missing_username_returns_400(self):
         response = self.client.get(
             self.url,
-            {'username': 'ExistingUser'}
+            {'email': 'unique_email@example.com'}
         )
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertEqual(
-            response.data,
-            {'taken': True, 'message': 'Email or username has already been taken.'}
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
+
+    def test_empty_email_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'brand_new_username', 'email': '   '}
         )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
+
+    def test_empty_username_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {'username': '   ', 'email': 'unique_email@example.com'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
 
     def test_empty_params_returns_400(self):
         response = self.client.get(self.url)

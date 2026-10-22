@@ -17,29 +17,27 @@ The endpoint is public (accessible without authentication) and is a read-only qu
 |------|---------|---------------|
 | `200` | Available | `{"taken": false, "message": "Email and username are available."}` |
 | `409` | Taken | `{"taken": true, "message": "Email or username has already been taken."}` |
-| `400` | Bad Request | `{"detail": "At least one of 'email' or 'username' must be provided."}` |
+| `400` | Bad Request | `{"detail": "Both 'email' and 'username' must be provided."}` |
 | `405` | Method Not Allowed | Returned if non-GET methods (e.g. POST) are called |
 
 ## Request Parameters
 
-You can check an email, a username, or both at once.
+Both `email` and `username` must be provided in the query string.
 
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
-| `email` | string | Optional* | Email address to check (case-insensitive) |
-| `username` | string | Optional* | Username to check (case-insensitive) |
-
-\* At least one of `email` or `username` must be provided.
+| `email` | string | **Yes** | Email address to check (case-insensitive) |
+| `username` | string | **Yes** | Username to check (case-insensitive) |
 
 ## Examples
 
-### 1. Check with GET (Both username and email)
+### 1. Check with GET (Available - 200 OK)
 
 ```http
 GET /api/signup-check/?username=johndoe&email=john%40example.com HTTP/1.1
 ```
 
-**Response (Available - 200 OK):**
+**Response (200 OK):**
 ```json
 {
   "taken": false,
@@ -47,21 +45,13 @@ GET /api/signup-check/?username=johndoe&email=john%40example.com HTTP/1.1
 }
 ```
 
-**Response (Taken - 409 Conflict):**
-```json
-{
-  "taken": true,
-  "message": "Email or username has already been taken."
-}
-```
-
-### 2. Check single field (e.g. email only)
+### 2. Check with GET (Taken - 409 Conflict)
 
 ```http
-GET /api/signup-check/?email=john%40example.com HTTP/1.1
+GET /api/signup-check/?username=johndoe&email=existing%40example.com HTTP/1.1
 ```
 
-**Response (Taken - 409 Conflict):**
+**Response (409 Conflict):**
 ```json
 {
   "taken": true,
@@ -71,14 +61,16 @@ GET /api/signup-check/?email=john%40example.com HTTP/1.1
 
 ### 3. Missing Inputs (400 Bad Request)
 
+If either `email` or `username` is omitted or empty:
+
 ```http
-GET /api/signup-check/ HTTP/1.1
+GET /api/signup-check/?username=johndoe HTTP/1.1
 ```
 
 **Response (400 Bad Request):**
 ```json
 {
-  "detail": "At least one of 'email' or 'username' must be provided."
+  "detail": "Both 'email' and 'username' must be provided."
 }
 ```
 
