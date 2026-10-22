@@ -22,9 +22,12 @@
   }
 }
 
+header a {
+  text-decoration: none !important;
+}
+
 a {
     color: #333333;
-    text-decoration: underline;
 
     &:hover {
         color: #000000;

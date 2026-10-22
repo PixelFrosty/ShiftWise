@@ -4,8 +4,37 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16">
         <!-- Logo & Navigation Links -->
-        <div class="flex items-center space-x-8">
-          <a routerLink="/dashboard" class="flex items-center space-x-2 text-xl font-bold text-slate-800 tracking-tight">
+        <div class="flex items-center space-x-4 sm:space-x-8">
+          <!-- Hamburger Menu Dropdown -->
+          <div class="relative">
+            <button (click)="toggleMenu()"
+                    type="button"
+                    class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer flex items-center justify-center"
+                    aria-label="Toggle navigation menu">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+            </button>
+
+            @if (isMenuOpen) {
+              <!-- Backdrop to close on click outside -->
+              <div class="fixed inset-0 z-40" (click)="closeMenu()"></div>
+
+              <div class="absolute left-0 mt-2 w-48 rounded-xl bg-white border border-slate-200 shadow-lg py-1.5 z-50">
+                <a routerLink="/" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
+                  Log In
+                </a>
+                <a href="#" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
+                  About Us
+                </a>
+                <a href="#" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
+                  Contact
+                </a>
+              </div>
+            }
+          </div>
+
+          <a routerLink="/dashboard" class="flex items-center space-x-2 text-xl font-bold text-slate-800 tracking-tight no-underline">
             <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600 text-white font-black text-lg">S</span>
             <span>Shift<span class="text-emerald-600">Wise</span></span>
           </a>
@@ -67,7 +96,7 @@
               </button>
             </div>
           } @else {
-            <a routerLink="/login" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition shadow-sm">
+            <a routerLink="/login" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition shadow-sm no-underline">
               Sign In
             </a>
           }

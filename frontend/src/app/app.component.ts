@@ -28,6 +28,16 @@ export class AppComponent {
 
   notifications: NotificationMessage[] = [];
 
+  isMenuOpen = false;
+
+  toggleMenu(): void {
+    this.isMenuOpen = !this.isMenuOpen;
+  }
+
+  closeMenu(): void {
+    this.isMenuOpen = false;
+  }
+
   get isManagerOrCeo(): boolean {
     return this.currentUser?.role === 'CEO' || this.currentUser?.role === 'MANAGER';
   }
