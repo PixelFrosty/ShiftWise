@@ -17,6 +17,16 @@ export interface Employee {
   payRate: number | null;
 }
 
+export interface EditEmployeeForm {
+  id: number;
+  name: string;
+  position: string;
+  departmentId: number;
+  role: 'ceo' | 'manager' | 'employee';
+  productivityScore: number | null;
+  payRate: number | null;
+}
+
 @Component({
   selector: 'app-employee-directory',
   standalone: true,
@@ -31,6 +41,10 @@ export class EmployeeDirectoryComponent {
   // Delete modal state
   employeeToDelete: Employee | null = null;
   isDeleting = false;
+
+  // Edit modal state
+  editingEmployee: EditEmployeeForm | null = null;
+  isSavingEdit = false;
 
   // Placeholder departments — replace with HttpClient call when API is ready
   departments: Department[] = [
@@ -113,6 +127,7 @@ export class EmployeeDirectoryComponent {
     return '$' + rate.toFixed(2) + '/hr';
   }
 
+  // Delete modal methods
   openDeleteModal(emp: Employee): void {
     this.employeeToDelete = emp;
   }
@@ -132,6 +147,53 @@ export class EmployeeDirectoryComponent {
       this.employees = this.employees.filter(e => e.id !== idToDelete);
       this.isDeleting = false;
       this.employeeToDelete = null;
+    }, 300);
+  }
+
+  // Edit modal methods
+  openEditModal(emp: Employee): void {
+    this.editingEmployee = {
+      id: emp.id,
+      name: emp.name,
+      position: emp.position,
+      departmentId: emp.department.id,
+      role: emp.role,
+      productivityScore: emp.productivityScore,
+      payRate: emp.payRate
+    };
+  }
+
+  closeEditModal(): void {
+    if (this.isSavingEdit) return;
+    this.editingEmployee = null;
+  }
+
+  saveEdit(): void {
+    if (!this.editingEmployee) return;
+    this.isSavingEdit = true;
+
+    setTimeout(() => {
+      if (!this.editingEmployee) return;
+      const dept = this.departments.find(d => d.id === Number(this.editingEmployee?.departmentId)) || {
+        id: Number(this.editingEmployee.departmentId),
+        name: 'General'
+      };
+
+      const index = this.employees.findIndex(e => e.id === this.editingEmployee?.id);
+      if (index !== -1) {
+        this.employees[index] = {
+          ...this.employees[index],
+          name: this.editingEmployee.name,
+          position: this.editingEmployee.position,
+          department: dept,
+          role: this.editingEmployee.role,
+          productivityScore: this.editingEmployee.productivityScore !== null && this.editingEmployee.productivityScore !== undefined ? Number(this.editingEmployee.productivityScore) : null,
+          payRate: this.editingEmployee.payRate !== null && this.editingEmployee.payRate !== undefined ? Number(this.editingEmployee.payRate) : null
+        };
+      }
+
+      this.isSavingEdit = false;
+      this.editingEmployee = null;
     }, 300);
   }
 }
