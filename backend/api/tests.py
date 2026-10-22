@@ -184,6 +184,135 @@ class ApiSignupTest(APITestCase):
         self.assertEqual(response.data['date_of_birth'], '2000-02-02')
         self.assertNotIn('password', response.data)
 
+
+class SignupCheckApiTests(APITestCase):
+    def setUp(self):
+        self.url = reverse('signup_check')
+        self.user = User.objects.create_user(
+            username='ExistingUser',
+            email='existing@example.com',
+            first_name='Existing',
+            last_name='User',
+            password='testpassword123',
+            date_of_birth='1995-05-05'
+        )
+
+    def test_taken_when_both_username_and_email_match(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'ExistingUser', 'email': 'existing@example.com'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response.data,
+            {'taken': True, 'message': 'Email or username has already been taken.'}
+        )
+
+    def test_taken_when_only_email_matches(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'fresh_user', 'email': 'existing@example.com'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response.data,
+            {'taken': True, 'message': 'Email or username has already been taken.'}
+        )
+
+    def test_taken_when_only_username_matches(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'ExistingUser', 'email': 'fresh_email@example.com'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response.data,
+            {'taken': True, 'message': 'Email or username has already been taken.'}
+        )
+
+    def test_taken_case_insensitive(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'EXISTINGUSER', 'email': 'EXISTING@EXAMPLE.COM'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response.data,
+            {'taken': True, 'message': 'Email or username has already been taken.'}
+        )
+
+    def test_available_when_neither_matches(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'new_user', 'email': 'new_email@example.com'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {'taken': False, 'message': 'Email and username are available.'}
+        )
+
+    def test_missing_email_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'brand_new_username'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
+
+    def test_missing_username_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {'email': 'unique_email@example.com'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
+
+    def test_empty_email_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {'username': 'brand_new_username', 'email': '   '}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
+
+    def test_empty_username_returns_400(self):
+        response = self.client.get(
+            self.url,
+            {'username': '   ', 'email': 'unique_email@example.com'}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {'detail': "Both 'email' and 'username' must be provided."})
+
+    def test_empty_params_returns_400(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('detail', response.data)
+
+        response = self.client.get(
+            self.url,
+            {'username': '   ', 'email': '   '}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_post_method_not_allowed(self):
+        response = self.client.post(
+            self.url,
+            {'username': 'ExistingUser', 'email': 'existing@example.com'},
+            format='json'
+        )
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_endpoint_accessible_unauthenticated(self):
+        self.client.credentials()  # Ensure no auth header is set
+        response = self.client.get(
+            self.url,
+            {'username': 'any_user', 'email': 'any@example.com'}
+        )
+        self.assertNotEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
 class ApiLoginTests(APITestCase):
 
     def setUp(self):

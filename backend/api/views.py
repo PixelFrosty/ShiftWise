@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Q
-from .models import AvailabilitySlot, CompatibilityScore, Project, Schedule, TimeOffRequest
+from .models import AvailabilitySlot, CompatibilityScore, Project, Schedule, TimeOffRequest, User
 from .serializers import (AvailabilitySlotSerializer, CompatibilityScoreSerializer, ProjectSerializer,
                           ScheduleSerializer, TimeOffRequestSerializer, UserSerializer)
 
@@ -28,6 +28,54 @@ def sign_up(request):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def signup_check(request):
+    """
+    Checks if an email or username has already been taken.
+    Does not disclose which one is taken to protect user privacy.
+    Requires both 'email' and 'username' query parameters.
+    """
+    email = request.query_params.get('email')
+    username = request.query_params.get('username')
+
+    if email is not None:
+        email = email.strip() if isinstance(email, str) else str(email).strip()
+        if not email:
+            email = None
+
+    if username is not None:
+        username = username.strip() if isinstance(username, str) else str(username).strip()
+        if not username:
+            username = None
+
+    if not email or not username:
+        return Response(
+            {'detail': "Both 'email' and 'username' must be provided."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    query = Q(email__iexact=email) | Q(username__iexact=username)
+    is_taken = User.objects.filter(query).exists()
+
+    if is_taken:
+        return Response(
+            {
+                'taken': True,
+                'message': 'Email or username has already been taken.',
+            },
+            status=status.HTTP_409_CONFLICT
+        )
+
+    return Response(
+        {
+            'taken': False,
+            'message': 'Email and username are available.',
+        },
+        status=status.HTTP_200_OK
+    )
 
 """
 expects a JSON payload with the following attributes:
