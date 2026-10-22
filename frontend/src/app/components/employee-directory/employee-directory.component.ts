@@ -28,6 +28,10 @@ export class EmployeeDirectoryComponent {
   searchQuery = '';
   selectedDeptId = '';
 
+  // Delete modal state
+  employeeToDelete: Employee | null = null;
+  isDeleting = false;
+
   // Placeholder departments — replace with HttpClient call when API is ready
   departments: Department[] = [
     { id: 1, name: 'Engineering' },
@@ -107,5 +111,27 @@ export class EmployeeDirectoryComponent {
   formatPayRate(rate: number | null): string {
     if (rate === null) return '—';
     return '$' + rate.toFixed(2) + '/hr';
+  }
+
+  openDeleteModal(emp: Employee): void {
+    this.employeeToDelete = emp;
+  }
+
+  closeDeleteModal(): void {
+    if (this.isDeleting) return;
+    this.employeeToDelete = null;
+  }
+
+  confirmDelete(): void {
+    if (!this.employeeToDelete) return;
+    this.isDeleting = true;
+
+    // Simulate delete: remove employee from the list
+    setTimeout(() => {
+      const idToDelete = this.employeeToDelete?.id;
+      this.employees = this.employees.filter(e => e.id !== idToDelete);
+      this.isDeleting = false;
+      this.employeeToDelete = null;
+    }, 300);
   }
 }
