@@ -1,48 +1,38 @@
-<header class="navbar">
-    <button class="menu-btn" (click)="toggleMenu()" aria-label="Toggle navigation menu">
-        <span class="hamburger-icon"></span>
-        <span class="hamburger-icon"></span>
-        <span class="hamburger-icon"></span>
-    </button>
-    <h1 class="brand-title">Shiftwise</h1>
-
-    @if (isMenuOpen) {
-    <div class="dropdown-menu">
-        <a href="#" class="menu-item">About Us</a>
-        <a href="#" class="menu-item">Contact</a>
+<div class="max-w-md mx-auto my-8">
+  <div class="bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-600 text-white font-black text-2xl mb-2">S</div>
+      <h1 class="text-2xl font-bold text-slate-800">Welcome Back</h1>
+      <p class="text-sm text-slate-500 mt-1">Sign in to access your scheduling portal</p>
     </div>
-    }
-</header>
 
-<main class="page-container">
-    <div class="login-card">
-        <h2 class="card-title">Log In</h2>
+    <form (ngSubmit)="onLogin($event)" class="space-y-4">
+      <div>
+        <label for="email" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Email or Username</label>
+        <input type="text" id="email" class="form-input" placeholder="e.g. manager1 or user@example.com" />
+      </div>
 
-        <form class="login-form" (ngSubmit)="onLogin($event)">
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" class="form-input" />
-            </div>
+      <div>
+        <label for="password" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Password</label>
+        <input type="password" id="password" class="form-input" placeholder="••••••••" />
+      </div>
 
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" class="form-input" />
-            </div>
+      @if (hasError) {
+        <div class="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm font-medium text-center">
+          {{ errorMessage }}
+        </div>
+      }
 
-            @if (hasError) {
-            <div class="error-banner">
-                {{ errorMessage }}
-            </div>
-            }
+      <div class="flex flex-col space-y-2 text-center text-sm pt-2">
+        <p class="text-slate-600">
+          Don't have an account? <a routerLink="/register" class="text-emerald-600 hover:text-emerald-700 font-semibold underline">Click here</a>
+        </p>
+        <a routerLink="/forgot-password" class="text-xs text-slate-500 hover:text-slate-800 underline">Forgot password?</a>
+      </div>
 
-            <div class="form-links">
-                <p class="signup-text">
-                    Don't have an account? <a routerLink="/register" class="signup-btn">Click here</a>
-                </p>
-                <a routerLink="/forgot-password" class="inline-link forgot-link">Forgot password?</a>
-            </div>
-
-            <button type="submit" class="submit-btn">Log In</button>
-        </form>
-    </div>
-</main>
+      <button type="submit" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md shadow-sm transition cursor-pointer">
+        Sign In
+      </button>
+    </form>
+  </div>
+</div>
