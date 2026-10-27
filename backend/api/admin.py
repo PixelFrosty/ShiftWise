@@ -72,7 +72,11 @@ class EmployeeProfileForm(forms.ModelForm):
         cleaned_data = super().clean()
         company = cleaned_data.get('company')
         if self.instance and self.instance.pk:
-            if company and company.pk != self.instance.company_id:
+            prefix = f"{self.prefix}-" if self.prefix else ""
+            raw_company = self.data.get(f"{prefix}company") if self.data else None
+            is_raw_tampered = raw_company is not None and str(raw_company) != str(self.instance.company_id)
+            is_cleaned_mismatched = company and company.pk != self.instance.company_id
+            if is_raw_tampered or is_cleaned_mismatched:
                 self.add_error(
                     'company',
                     'Company cannot be changed once assigned. Create a new employee profile instead.'
