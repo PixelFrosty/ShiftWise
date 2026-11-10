@@ -63,6 +63,7 @@ class EmployeeProfile(models.Model):
     position = models.CharField(max_length=255, blank=True)
     productivity_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     pay_rate = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    skills = models.ManyToManyField('Skill', blank=True, related_name='employees')
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
@@ -95,7 +96,8 @@ class Schedule(models.Model):
         CANCELLED = 'cancelled', 'Cancelled'
 
     task_name = models.CharField(max_length=255)
-    employee = models.ForeignKey(EmployeeProfile, on_delete=models.CASCADE, related_name='schedules')
+    task = models.ForeignKey('Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
     shift_date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
@@ -108,7 +110,8 @@ class Schedule(models.Model):
         ordering = ['shift_date', 'start_time', 'id']
 
     def __str__(self):
-        return f'{self.task_name}: {self.employee} {self.shift_date} {self.start_time}-{self.end_time}'
+        emp = self.employee if self.employee else 'Unassigned'
+        return f'{self.task_name}: {emp} {self.shift_date} {self.start_time}-{self.end_time}'
 
 
 class CompatibilityScore(models.Model):
@@ -227,6 +230,9 @@ class Task(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tasks')
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    priority = models.CharField(max_length=10, choices=Project.Priority.choices, default=Project.Priority.MEDIUM)
+    required_people = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    duration_hours = models.DecimalField(max_digits=4, decimal_places=2, default=1.0, validators=[MinValueValidator(0.25)])
     skills = models.ManyToManyField(Skill, blank=True, related_name='tasks')
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
