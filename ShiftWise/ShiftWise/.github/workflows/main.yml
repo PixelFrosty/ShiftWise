@@ -1,0 +1,213 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: Standalone Django Test Suite
+  # Runs unit and integration tests quickly against a PostgreSQL service container.
+  # ----------------------------------------------------------------------------
+  django-tests:
+    name: Django Tests (Fast Suite)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: docker.io/library/postgres:16-alpine
+        env:
+          POSTGRES_DB: shiftwise_db
+          POSTGRES_USER: shiftwise_user
+          POSTGRES_PASSWORD: shiftwise_secure_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U shiftwise_user -d shiftwise_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Configure test environment variables
+        run: |
+          cp .env.example .env
+          # Point database host to localhost since PostgreSQL runs as a GitHub runner service
+          sed -i 's/DB_HOST=db/DB_HOST=localhost/' .env
+
+      - name: Run all Django tests
+        env:
+          SECRET_KEY: django-insecure-ci-secret-key-for-automated-testing
+          DEBUG: 'True'
+          POSTGRES_DB: shiftwise_db
+          POSTGRES_USER: shiftwise_user
+          POSTGRES_PASSWORD: shiftwise_secure_password
+          DB_HOST: localhost
+          DB_PORT: '5432'
+        run: |
+          python backend/manage.py test api
+
+  # ----------------------------------------------------------------------------
+  # Job 2: Podman Multi-Container Stack Verification
+  # Builds containers using Podman, validates frontend/backend/database startup,
+  # and verifies the containerized runtime end-to-end.
+  # ----------------------------------------------------------------------------
+  podman-stack:
+    name: Podman Container & Service Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Podman Compose
+        run: |
+          python -m pip install --upgrade pip
+          pip install podman-compose
+
+      - name: Verify Podman & Podman Compose
+        run: |
+          podman --version
+          podman-compose --version
+
+      - name: Prepare environment & Dockerfile naming
+        run: |
+          # Create environment file from template
+          cp .env.example .env
+
+          # Linux runners use case-sensitive ext4 filesystems.
+          # Ensure standard Dockerfile naming is recognized by build tools.
+          if [ -f backend/DockerFile ] && [ ! -f backend/Dockerfile ]; then
+            cp backend/DockerFile backend/Dockerfile
+          fi
+          if [ -f frontend/DockerFile ] && [ ! -f frontend/Dockerfile ]; then
+            cp frontend/DockerFile frontend/Dockerfile
+          fi
+
+      - name: Build and start Podman containers
+        run: |
+          podman-compose up -d --build
+          echo "Listing all created containers:"
+          podman ps -a
+
+      - name: Check Database startup & health
+        run: |
+          echo "Waiting for PostgreSQL database container to become healthy..."
+          TIMEOUT=60
+          ELAPSED=0
+          READY=false
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            if podman-compose exec -T db pg_isready -U shiftwise_user -d shiftwise_db > /dev/null 2>&1; then
+              echo "✓ Database is healthy and accepting connections! (${ELAPSED}s)"
+              READY=true
+              break
+            fi
+            echo "Waiting for database... (${ELAPSED}s / ${TIMEOUT}s)"
+            sleep 3
+            ELAPSED=$((ELAPSED + 3))
+          done
+
+          if [ "$READY" != "true" ]; then
+            echo "✗ Database failed to become healthy within ${TIMEOUT} seconds"
+            exit 1
+          fi
+
+      - name: Check Backend startup & apply migrations
+        run: |
+          echo "Applying Django migrations in backend container..."
+          podman-compose exec -T backend python manage.py migrate --noinput
+
+          echo "Running Django system checks..."
+          podman-compose exec -T backend python manage.py check
+
+          echo "Verifying backend HTTP responsiveness on port 8000..."
+          TIMEOUT=60
+          ELAPSED=0
+          READY=false
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/test/ || true)
+            if [[ "$HTTP_STATUS" =~ ^[234] ]]; then
+              echo "✓ Backend server is responding (HTTP $HTTP_STATUS)!"
+              READY=true
+              break
+            fi
+            echo "Waiting for backend HTTP response... (${ELAPSED}s / ${TIMEOUT}s)"
+            sleep 3
+            ELAPSED=$((ELAPSED + 3))
+          done
+
+          if [ "$READY" != "true" ]; then
+            echo "✗ Backend HTTP server failed to respond within ${TIMEOUT} seconds"
+            exit 1
+          fi
+
+      - name: Check Frontend startup
+        run: |
+          echo "Waiting for Frontend Angular server to compile and respond on port 4200..."
+          TIMEOUT=120
+          ELAPSED=0
+          READY=false
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4200/ || true)
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✓ Frontend server is up and serving index.html (HTTP 200)!"
+              READY=true
+              break
+            fi
+            echo "Waiting for frontend compilation... (${ELAPSED}s / ${TIMEOUT}s)"
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          if [ "$READY" != "true" ]; then
+            echo "✗ Frontend server failed to respond within ${TIMEOUT} seconds"
+            exit 1
+          fi
+
+      - name: Run Django tests inside Backend container
+        run: |
+          echo "Executing Django test suite inside containerized environment..."
+          podman-compose exec -T backend python manage.py test
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          echo "=================== CONTAINER STATUS ==================="
+          podman ps -a
+          echo "=================== DATABASE LOGS ==================="
+          podman-compose logs db || true
+          echo "=================== BACKEND LOGS ==================="
+          podman-compose logs backend || true
+          echo "=================== FRONTEND LOGS ==================="
+          podman-compose logs frontend || true
+
+      - name: Teardown Podman stack
+        if: always()
+        run: |
+          podman-compose down -v || true

@@ -1,0 +1,59 @@
+<div class="flex flex-col items-center pt-10 pb-16">
+  <h1 class="text-4xl font-bold text-slate-900 mb-3">Weekly Schedule</h1>
+
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 w-full max-w-[420px]">
+    <!-- Month / year pickers -->
+    <div class="flex items-center justify-between mb-4">
+      <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month"
+              class="w-8 h-8 rounded-md text-slate-700 hover:bg-slate-100 cursor-pointer">&lsaquo;</button>
+      <div class="flex items-center gap-2">
+        <select [value]="viewMonth" (change)="onMonthChange($event)" aria-label="Month"
+                class="h-9 border border-slate-300 rounded-md px-2 text-sm bg-white">
+          @for (m of months; track $index) {
+            <option [value]="$index" [selected]="$index === viewMonth">{{ m.slice(0, 3) }}</option>
+          }
+        </select>
+        <select [value]="viewYear" (change)="onYearChange($event)" aria-label="Year"
+                class="h-9 border border-slate-300 rounded-md px-2 text-sm bg-white">
+          @for (y of years; track y) {
+            <option [value]="y" [selected]="y === viewYear">{{ y }}</option>
+          }
+        </select>
+      </div>
+      <button type="button" (click)="shiftMonth(1)" aria-label="Next month"
+              class="w-8 h-8 rounded-md text-slate-700 hover:bg-slate-100 cursor-pointer">&rsaquo;</button>
+    </div>
+
+    <!-- Day grid: hovering any day highlights its Monday-Sunday week; clicking opens that week -->
+    <div class="grid grid-cols-7 text-center text-xs text-slate-500 mb-1">
+      @for (d of weekdays; track d) { <div class="py-1">{{ d }}</div> }
+    </div>
+    <div class="grid grid-cols-7 text-center text-sm" (mouseleave)="hoveredWeek = null">
+      @for (day of days; track day.date.getTime()) {
+        <button type="button"
+                (mouseenter)="hoveredWeek = day.weekStartIso"
+                (focus)="hoveredWeek = day.weekStartIso"
+                (click)="openWeek(day)"
+                class="h-10 cursor-pointer transition"
+                [class.text-slate-300]="!day.inMonth"
+                [class.text-slate-900]="day.inMonth"
+                [class.bg-slate-100]="hoveredWeek === day.weekStartIso"
+                [class.font-semibold]="hoveredWeek === day.weekStartIso">
+          {{ day.label }}
+        </button>
+      }
+    </div>
+    <p class="text-xs text-slate-500 text-center mt-3">Select any day to open that week's schedule.</p>
+  </div>
+
+  <!-- Month stepper under the card, as in the wireframe -->
+  <div class="flex items-center gap-2 mt-3">
+    <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month"
+            class="h-9 w-9 bg-white border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer">&lsaquo;</button>
+    <span class="h-9 px-4 inline-flex items-center bg-white border border-slate-300 rounded-md text-sm font-semibold text-slate-800">
+      {{ monthLabel }}
+    </span>
+    <button type="button" (click)="shiftMonth(1)" aria-label="Next month"
+            class="h-9 w-9 bg-white border border-slate-300 rounded-md hover:bg-slate-50 cursor-pointer">&rsaquo;</button>
+  </div>
+</div>
