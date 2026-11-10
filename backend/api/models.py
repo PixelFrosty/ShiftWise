@@ -221,3 +221,46 @@ class Skill(models.Model):
 
 
 Skills = Skill
+
+
+class Task(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tasks')
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    skills = models.ManyToManyField(Skill, blank=True, related_name='tasks')
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+
+    def __str__(self):
+        return self.name
+
+
+Tasks = Task
+
+
+class CompanyHours(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='company_hours')
+    monday_start = models.TimeField(null=True, blank=True)
+    monday_end = models.TimeField(null=True, blank=True)
+    tuesday_start = models.TimeField(null=True, blank=True)
+    tuesday_end = models.TimeField(null=True, blank=True)
+    wednesday_start = models.TimeField(null=True, blank=True)
+    wednesday_end = models.TimeField(null=True, blank=True)
+    thursday_start = models.TimeField(null=True, blank=True)
+    thursday_end = models.TimeField(null=True, blank=True)
+    friday_start = models.TimeField(null=True, blank=True)
+    friday_end = models.TimeField(null=True, blank=True)
+    saturday_start = models.TimeField(null=True, blank=True)
+    saturday_end = models.TimeField(null=True, blank=True)
+    sunday_start = models.TimeField(null=True, blank=True)
+    sunday_end = models.TimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name_plural = 'company hours'
+
+    def __str__(self):
+        return f'{self.company.name} Hours'
+
+
+company_hours = CompanyHours
