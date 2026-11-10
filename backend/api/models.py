@@ -63,6 +63,7 @@ class EmployeeProfile(models.Model):
     position = models.CharField(max_length=255, blank=True)
     productivity_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     pay_rate = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    max_weekly_hours = models.DecimalField(max_digits=4, decimal_places=1, default=40.0, validators=[MinValueValidator(0.0)])
     skills = models.ManyToManyField('Skill', blank=True, related_name='employees')
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
@@ -227,10 +228,20 @@ Skills = Skill
 
 
 class Task(models.Model):
+    class PreferredWindow(models.TextChoices):
+        FLEXIBLE = 'flexible', 'Flexible'
+        BEGINNING_OF_DAY = 'beginning_of_day', 'Beginning of Day'
+        MID_DAY = 'mid_day', 'Mid-Day'
+        END_OF_DAY = 'end_of_day', 'End of Day'
+        OPEN_TO_CLOSE = 'open_to_close', 'Open to Close'
+
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tasks')
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     priority = models.CharField(max_length=10, choices=Project.Priority.choices, default=Project.Priority.MEDIUM)
+    preferred_window = models.CharField(max_length=20, choices=PreferredWindow.choices,
+                                         default=PreferredWindow.FLEXIBLE)
+    is_recurring = models.BooleanField(default=False)
     required_people = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     duration_hours = models.DecimalField(max_digits=4, decimal_places=2, default=1.0, validators=[MinValueValidator(0.25)])
     skills = models.ManyToManyField(Skill, blank=True, related_name='tasks')
