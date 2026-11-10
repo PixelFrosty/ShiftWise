@@ -1,16 +1,24 @@
 # Create your views here.
 
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.dateparse import parse_date
-from rest_framework import serializers, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import serializers, status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework import status
 from django.db.models import Q
-from .models import AvailabilitySlot, CompatibilityScore, Project, Schedule, TimeOffRequest, User
-from .serializers import (AvailabilitySlotSerializer, CompatibilityScoreSerializer, ProjectSerializer,
-                          ScheduleSerializer, TimeOffRequestSerializer, UserSerializer)
+from .models import AvailabilitySlot, Company, CompatibilityScore, Department, Project, Schedule, TimeOffRequest, User
+from .serializers import (
+    AvailabilitySlotSerializer,
+    CompatibilityScoreSerializer,
+    GenerateShiftsSerializer,
+    ProjectSerializer,
+    ScheduleSerializer,
+    TimeOffRequestSerializer,
+    UserSerializer,
+)
+from .services.shift_generator import ShiftGeneratorService
 
 @api_view(['GET'])
 def test(request):
@@ -127,6 +135,35 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         if 'date_to' in params:
             qs = qs.filter(shift_date__lte=self._date(params, 'date_to'))
         return qs
+
+    @action(detail=False, methods=['post'], url_path='generate')
+    def generate(self, request):
+        """
+        POST /api/schedules/generate/
+        Body: { "company_id": 1, "week_start": "YYYY-MM-DD", "department_id": null, "clear_existing": false }
+        Generates weekly shift slots based on company open hours, projects, and task configurations.
+        """
+        serializer = GenerateShiftsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        company = Company.objects.get(pk=data['company_id'])
+        department = None
+        if data.get('department_id'):
+            department = Department.objects.get(pk=data['department_id'])
+
+        service = ShiftGeneratorService(
+            company=company,
+            week_start=data['week_start'],
+            department=department,
+            clear_existing=data.get('clear_existing', False),
+        )
+        try:
+            result = service.generate()
+            return Response(result, status=status.HTTP_201_CREATED)
+        except DjangoValidationError as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return Response({'error': msg}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CompatibilityScoreViewSet(viewsets.ModelViewSet):

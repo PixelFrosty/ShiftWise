@@ -1094,3 +1094,244 @@ class ProjectTests(EmployeeApiBase):
         self.emp.department.delete()
         project.refresh_from_db()
         self.assertIsNone(project.department)
+
+
+# Shift Generator Tests
+import datetime
+from .models import CompanyHours, Skill, Task
+from .services.shift_generator import ShiftGeneratorService
+
+class ShiftGeneratorTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='schedmanager', email='schedmanager@example.com',
+            first_name='Schedule', last_name='Manager', password='pass', date_of_birth='1990-01-01'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.company = Company.objects.create(name='Test Retail Co')
+        self.department = Department.objects.create(company=self.company, name='Operations')
+        self.employee = EmployeeProfile.objects.create(
+            user=self.user, company=self.company, department=self.department,
+            role=EmployeeProfile.Role.EMPLOYEE, max_weekly_hours=40.0
+        )
+
+        # Operating hours: Monday to Friday 09:00 - 17:00 (8h each), closed weekends
+        self.hours = CompanyHours.objects.create(
+            company=self.company,
+            monday_start=datetime.time(9, 0), monday_end=datetime.time(17, 0),
+            tuesday_start=datetime.time(9, 0), tuesday_end=datetime.time(17, 0),
+            wednesday_start=datetime.time(9, 0), wednesday_end=datetime.time(17, 0),
+            thursday_start=datetime.time(9, 0), thursday_end=datetime.time(17, 0),
+            friday_start=datetime.time(9, 0), friday_end=datetime.time(17, 0),
+            saturday_start=None, saturday_end=None,
+            sunday_start=None, sunday_end=None,
+        )
+
+        self.project = Project.objects.create(
+            company=self.company, department=self.department, name='Store Front',
+            priority=Project.Priority.HIGH, is_active=True
+        )
+        self.week_start = datetime.date(2026, 11, 16)  # A Monday
+
+    def test_recurring_task_generates_for_every_open_day(self):
+        Task.objects.create(
+            company=self.company, project=self.project, name='Register Lead',
+            is_recurring=True, required_people=1, duration_hours=8.0,
+            preferred_window=Task.PreferredWindow.OPEN_TO_CLOSE
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 5)
+        self.assertEqual(res['unassigned_shifts'], 5)
+        self.assertEqual(res['pre_assigned_shifts'], 0)
+        # Verify shifts exist Mon-Fri (Nov 16 - Nov 20)
+        dates = Schedule.objects.filter(task__company=self.company).values_list('shift_date', flat=True)
+        self.assertEqual(len(set(dates)), 5)
+        for s in Schedule.objects.all():
+            self.assertEqual(s.start_time, datetime.time(9, 0))
+            self.assertEqual(s.end_time, datetime.time(17, 0))
+            self.assertIsNone(s.employee)
+
+    def test_multi_person_preassigned_task(self):
+        Task.objects.create(
+            company=self.company, project=self.project, name='Inventory Audit',
+            is_recurring=False, required_people=3, duration_hours=4.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 3)
+        self.assertEqual(res['pre_assigned_shifts'], 1)
+        self.assertEqual(res['unassigned_shifts'], 2)
+
+        shifts = list(Schedule.objects.all().order_by('id'))
+        self.assertEqual(len(shifts), 3)
+        self.assertEqual(shifts[0].employee, self.employee)
+        self.assertIsNone(shifts[1].employee)
+        self.assertIsNone(shifts[2].employee)
+        for s in shifts:
+            self.assertEqual(s.start_time, datetime.time(9, 0))
+            self.assertEqual(s.end_time, datetime.time(13, 0))
+
+    def test_preferred_windows_intra_day(self):
+        # 1. Beginning of day (2h) -> 09:00 - 11:00
+        t1 = Task.objects.create(
+            company=self.company, project=self.project, name='Opening Prep',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # 2. Mid day (4h) -> midpoint is 13:00 -> 11:00 - 15:00
+        t2 = Task.objects.create(
+            company=self.company, project=self.project, name='Lunch Rush',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            preferred_window=Task.PreferredWindow.MID_DAY
+        )
+        # 3. End of day (2h) -> 15:00 - 17:00
+        t3 = Task.objects.create(
+            company=self.company, project=self.project, name='Closing Sweep',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.END_OF_DAY
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        s1 = Schedule.objects.get(task=t1)
+        self.assertEqual(s1.start_time, datetime.time(9, 0))
+        self.assertEqual(s1.end_time, datetime.time(11, 0))
+
+        s2 = Schedule.objects.get(task=t2)
+        self.assertEqual(s2.start_time, datetime.time(11, 0))
+        self.assertEqual(s2.end_time, datetime.time(15, 0))
+
+        s3 = Schedule.objects.get(task=t3)
+        self.assertEqual(s3.start_time, datetime.time(15, 0))
+        self.assertEqual(s3.end_time, datetime.time(17, 0))
+
+    def test_multi_day_split_for_long_duration(self):
+        # 20-hour task, daily capacity is 8 hours -> 8h, 8h, 4h across 3 days
+        Task.objects.create(
+            company=self.company, project=self.project, name='Store Remodel',
+            is_recurring=False, required_people=1, duration_hours=20.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 3)
+        shifts = list(Schedule.objects.all().order_by('shift_date'))
+        self.assertEqual(len(shifts), 3)
+        # Day 1: 8h (09:00 - 17:00)
+        self.assertEqual(shifts[0].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[0].end_time, datetime.time(17, 0))
+        # Day 2: 8h (09:00 - 17:00)
+        self.assertEqual(shifts[1].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[1].end_time, datetime.time(17, 0))
+        # Day 3: 4h (09:00 - 13:00)
+        self.assertEqual(shifts[2].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[2].end_time, datetime.time(13, 0))
+
+    def test_preassigned_employee_leave_avoidance(self):
+        # Alice is on approved time off on Monday Nov 16
+        TimeOffRequest.objects.create(
+            employee=self.employee,
+            start_date=datetime.date(2026, 11, 16),
+            end_date=datetime.date(2026, 11, 16),
+            status=TimeOffRequest.Status.APPROVED
+        )
+        # Task pre-assigned to Alice
+        Task.objects.create(
+            company=self.company, project=self.project, name='Audit Prep',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        # Should be scheduled on an open day that is NOT Monday
+        shift = Schedule.objects.first()
+        self.assertNotEqual(shift.shift_date, datetime.date(2026, 11, 16))
+        self.assertEqual(shift.employee, self.employee)
+        self.assertTrue(len(res['warnings']) > 0)
+
+    def test_api_generate_endpoint(self):
+        Task.objects.create(
+            company=self.company, project=self.project, name='API Scheduled Task',
+            is_recurring=True, required_people=2, duration_hours=4.0
+        )
+        url = reverse('schedule-generate')
+        payload = {
+            'company_id': self.company.pk,
+            'week_start': '2026-11-16',
+            'clear_existing': True
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['company_id'], self.company.pk)
+        self.assertEqual(response.data['total_shifts_generated'], 10)  # 5 days * 2 people
+        self.assertEqual(response.data['unassigned_shifts'], 10)
+
+    def test_recurring_task_respects_employee_time_off(self):
+        # Alice is pre-assigned to recurring task
+        task = Task.objects.create(
+            company=self.company, project=self.project, name='Daily Front Desk',
+            is_recurring=True, required_people=1, duration_hours=8.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.OPEN_TO_CLOSE
+        )
+        # Alice is approved off on Wednesday Nov 18
+        TimeOffRequest.objects.create(
+            employee=self.employee,
+            start_date=datetime.date(2026, 11, 18),
+            end_date=datetime.date(2026, 11, 18),
+            status=TimeOffRequest.Status.APPROVED
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 5)
+        self.assertEqual(res['pre_assigned_shifts'], 4)  # Mon, Tue, Thu, Fri
+        self.assertEqual(res['unassigned_shifts'], 1)    # Wed
+
+        wed_shift = Schedule.objects.get(shift_date=datetime.date(2026, 11, 18))
+        self.assertIsNone(wed_shift.employee)  # Left unassigned for smart scheduler!
+        self.assertTrue(any('approved time-off' in w for w in res['warnings']))
+
+        mon_shift = Schedule.objects.get(shift_date=datetime.date(2026, 11, 16))
+        self.assertEqual(mon_shift.employee, self.employee)
+
+    def test_availability_hours_validation(self):
+        # Alice is only available on Monday from 09:00 to 13:00 (4 hours)
+        AvailabilitySlot.objects.create(
+            employee=self.employee,
+            day_of_week=0,  # Monday
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0)
+        )
+
+        # Task A: 09:00 - 13:00 (fits Alice's slot)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Morning Task',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # Task B: 09:00 - 17:00 (exceeds Alice's 13:00 end_time)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Full Day Task',
+            is_recurring=False, required_people=1, duration_hours=8.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.OPEN_TO_CLOSE
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        morning_shift = Schedule.objects.get(task__name='Morning Task')
+        self.assertEqual(morning_shift.employee, self.employee)
+
+        full_day_shift = Schedule.objects.get(task__name='Full Day Task')
+        self.assertIsNone(full_day_shift.employee)  # Left unassigned!
+        self.assertTrue(any('do not cover shift' in w for w in res['warnings']))
+
+

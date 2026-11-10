@@ -1,5 +1,15 @@
 from rest_framework import serializers
-from .models import (AvailabilitySlot, CompatibilityScore, EmployeeProfile, Project, Schedule, TimeOffRequest, User)
+from .models import (
+    AvailabilitySlot,
+    Company,
+    CompatibilityScore,
+    Department,
+    EmployeeProfile,
+    Project,
+    Schedule,
+    TimeOffRequest,
+    User,
+)
 
 class UserSerializer(serializers.ModelSerializer):
 
@@ -44,11 +54,16 @@ class ScheduleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Schedule
-        fields = ['id', 'task_name', 'employee', 'employee_name', 'shift_date', 'start_time',
+        fields = ['id', 'task', 'task_name', 'employee', 'employee_name', 'shift_date', 'start_time',
                   'end_time', 'status', 'notes', 'created_at', 'modified_at']
         read_only_fields = ['created_at', 'modified_at']
+        extra_kwargs = {
+            'employee': {'required': True, 'allow_null': True},
+        }
 
     def get_employee_name(self, obj):
+        if not obj.employee:
+            return None
         return obj.employee.user.get_full_name() or obj.employee.user.email
 
     def validate_task_name(self, value):
@@ -216,4 +231,27 @@ class ProjectSerializer(serializers.ModelSerializer):
         department = attrs.get('department', getattr(self.instance, 'department', None))
         if company and department and department.company_id != company.pk:
             raise serializers.ValidationError({'department': 'Department does not belong to this company.'})
+        return attrs
+
+
+class GenerateShiftsSerializer(serializers.Serializer):
+    company_id = serializers.IntegerField(required=True)
+    week_start = serializers.DateField(required=True)
+    department_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    clear_existing = serializers.BooleanField(required=False, default=False)
+
+    def validate_company_id(self, value):
+        if not Company.objects.filter(pk=value).exists():
+            raise serializers.ValidationError(f"Company #{value} does not exist.")
+        return value
+
+    def validate(self, attrs):
+        dept_id = attrs.get('department_id')
+        comp_id = attrs.get('company_id')
+        if dept_id:
+            if not Department.objects.filter(pk=dept_id, company_id=comp_id).exists():
+                raise serializers.ValidationError(
+                    {'department_id': 'Department does not exist or does not belong to this company.'}
+                )
+        return attrs
         return attrs
