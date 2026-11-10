@@ -1,6 +1,0 @@
-node_modules
-.angular
-dist
-npm-debug.log
-.vscode
-.editorconfig
