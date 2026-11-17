@@ -4,7 +4,7 @@ import { AuthService } from '../../core/auth.service';
 import { Role } from '../../core/models';
 import { mondayOf, toIso } from '../shared/week-utils';
 
-interface HomeCard { title: string; text: string; link: string; cta: string; icon: string; primary?: boolean; }
+interface HomeCard { title: string; text: string; link: string; cta: string; icon: string; hoverIcon: string; primary?: boolean; }
 
 interface HomeConfig {
   subtitle: string;
@@ -15,12 +15,12 @@ interface HomeConfig {
 
 // Simple outline icons (24x24 paths)
 const ICON = {
-  calendar: '/icon_calendar.png',
-  timeOff: '/icon_timeoff.png',
-  clock: '/icon_clock.png',
-  people: '/icon_employee.png',
-  key: '/icon_code.png',
-  org: '/icon_org.png'
+  calendar: { normal: '/icon_calendar.png', hover: '/icon_white_calendar.png' },
+  timeOff:  { normal: '/icon_timeoff.png',  hover: '/icon_white_timeoff.png' },
+  clock:    { normal: '/icon_clock.png',    hover: '/icon_white_clock.png' },
+  people:   { normal: '/icon_employee.png', hover: '/icon_white_employee.png' },
+  key:      { normal: '/icon_code.png',     hover: '/icon_white_code.png' },
+  org:      { normal: '/icon_org.png',      hover: '/icon_white_org.png' }
 };
 
 @Component({
@@ -36,8 +36,9 @@ const ICON = {
         <div class="mt-9 grid gap-5" [style.grid-template-columns]="'repeat(auto-fit, minmax(210px, 1fr))'">
           @for (card of c.cards; track card.title) {
             <a [routerLink]="card.link" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition p-6 no-underline" [attr.data-testid]="'card-' + card.title.toLowerCase()">
-              <span class="inline-flex items-center justify-center w-13 h-13 rounded-xl mb-4 p-3 bg-emerald-100 group-hover:bg-emerald-600 transition">
-                <img [src]="card.icon" alt="" class="w-7 h-7 object-contain" />
+              <span class="relative inline-flex w-[52px] h-[52px] rounded-xl mb-4 bg-emerald-100 group-hover:bg-emerald-600 transition">
+                <img [src]="card.icon" alt="" class="absolute inset-0 m-auto w-7 h-7 object-contain transition-opacity group-hover:opacity-0" />
+                <img [src]="card.hoverIcon" alt="" class="absolute inset-0 m-auto w-7 h-7 object-contain opacity-0 transition-opacity group-hover:opacity-100" />
               </span>
               <h2 class="text-xl font-bold text-slate-900">{{ card.title }}</h2>
               <p class="mt-1.5 text-sm text-slate-500 leading-relaxed">{{ card.text }}</p>
@@ -75,9 +76,9 @@ export class HomeComponent {
       return {
         subtitle: 'Check your shifts, request time off and keep your availability up to date.',
         cards: [
-          { title: 'Schedules', text: "See your upcoming shifts and the week's open shifts.", link: '/schedules', cta: 'View my schedule', icon: ICON.calendar, primary: true },
-          { title: 'Time Off', text: 'Request days off and track the status of your requests.', link: '/time-off', cta: 'Request time off', icon: ICON.timeOff },
-          { title: 'Availability', text: "Set the days and hours you're able to work.", link: '/availability', cta: 'Update availability', icon: ICON.clock }
+          { title: 'Schedules', text: "See your upcoming shifts and the week's open shifts.", link: '/schedules', cta: 'View my schedule', icon: ICON.calendar.normal, hoverIcon: ICON.calendar.hover, primary: true },
+          { title: 'Time Off', text: 'Request days off and track the status of your requests.', link: '/time-off', cta: 'Request time off', icon: ICON.timeOff.normal, hoverIcon: ICON.timeOff.hover },
+          { title: 'Availability', text: "Set the days and hours you're able to work.", link: '/availability', cta: 'Update availability', icon: ICON.clock.normal, hoverIcon: ICON.clock.hover }
         ],
         banner: { title: 'Want more hours?', text: "Look for open shifts on this week's schedule.", primary: { label: 'See open shifts', link: this.thisWeek } }
       };
@@ -86,10 +87,10 @@ export class HomeComponent {
       return {
         subtitle: 'Keep your team scheduled and covered. Choose an area to get started.',
         cards: [
-          { title: 'Schedules', text: 'Build, review and publish weekly schedules for your team.', link: '/schedules', cta: 'Open schedules', icon: ICON.calendar, primary: true },
-          { title: 'Time Off', text: 'Approve or decline requests and see who on your team is out.', link: '/time-off', cta: 'Review requests', icon: ICON.timeOff },
-          { title: 'Employees', text: "See your team's roles, availability and contact details.", link: '/employees', cta: 'View employees', icon: ICON.people },
-          { title: 'Join Codes', text: 'Create codes so new hires can join your team.', link: '/codes', cta: 'Manage codes', icon: ICON.key }
+          { title: 'Schedules', text: 'Build, review and publish weekly schedules for your team.', link: '/schedules', cta: 'Open schedules', icon: ICON.calendar.normal, hoverIcon: ICON.calendar.hover, primary: true },
+          { title: 'Time Off', text: 'Approve or decline requests and see who on your team is out.', link: '/time-off', cta: 'Review requests', icon: ICON.timeOff.normal, hoverIcon: ICON.timeOff.hover },
+          { title: 'Employees', text: "See your team's roles, availability and contact details.", link: '/employees', cta: 'View employees', icon: ICON.people.normal, hoverIcon: ICON.people.hover },
+          { title: 'Join Codes', text: 'Create codes so new hires can join your team.', link: '/codes', cta: 'Manage codes', icon: ICON.key.normal, hoverIcon: ICON.key.hover }
         ],
         banner: { title: 'Open shifts to fill?', text: "Check this week's schedule or bring on someone new with a join code.",
                   secondary: { label: 'View this week', link: this.thisWeek }, primary: { label: 'Create join code', link: '/codes' } }
@@ -99,11 +100,11 @@ export class HomeComponent {
       return {
         subtitle: 'Everything you need to run your workforce, one click away. Choose an area to get started.',
         cards: [
-          { title: 'Schedules', text: 'Build, review and publish weekly schedules across every department.', link: '/schedules', cta: 'Open schedules', icon: ICON.calendar, primary: true },
-          { title: 'Time Off', text: 'Approve or decline requests and see who is out this week.', link: '/time-off', cta: 'Review requests', icon: ICON.timeOff },
-          { title: 'Employees', text: 'Manage your team, roles, availability and contact details.', link: '/employees', cta: 'View employees', icon: ICON.people },
-          { title: 'Join Codes', text: 'Create codes so new hires can join the right department.', link: '/codes', cta: 'Manage codes', icon: ICON.key },
-          { title: 'Departments', text: 'Organize teams, set coverage needs and assign managers.', link: '/departments', cta: 'View departments', icon: ICON.org }
+          { title: 'Schedules', text: 'Build, review and publish weekly schedules across every department.', link: '/schedules', cta: 'Open schedules', icon: ICON.calendar.normal, hoverIcon: ICON.calendar.hover, primary: true },
+          { title: 'Time Off', text: 'Approve or decline requests and see who is out this week.', link: '/time-off', cta: 'Review requests', icon: ICON.timeOff.normal, hoverIcon: ICON.timeOff.hover },
+          { title: 'Employees', text: 'Manage your team, roles, availability and contact details.', link: '/employees', cta: 'View employees', icon: ICON.people.normal, hoverIcon: ICON.people.hover },
+          { title: 'Join Codes', text: 'Create codes so new hires can join the right department.', link: '/codes', cta: 'Manage codes', icon: ICON.key.normal, hoverIcon: ICON.key.hover },
+          { title: 'Departments', text: 'Organize teams, set coverage needs and assign managers.', link: '/departments', cta: 'View departments', icon: ICON.org.normal, hoverIcon: ICON.org.hover }
         ],
         banner: { title: 'Growing the team?', text: 'Generate a join code and share it with new employees.',
                   secondary: { label: 'Add department', link: '/departments' }, primary: { label: 'Create join code', link: '/codes' } }
