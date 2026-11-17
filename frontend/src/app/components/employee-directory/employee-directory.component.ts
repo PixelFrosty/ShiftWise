@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { ApiService, Shift } from '../../core/api.service';
 
 export interface Department {
   id: number;
@@ -43,7 +44,13 @@ export interface AddEmployeeForm {
   templateUrl: './employee-directory.component.html',
   styleUrl: './employee-directory.component.scss'
 })
-export class EmployeeDirectoryComponent {
+export class EmployeeDirectoryComponent implements OnInit {
+  private api = inject(ApiService);
+
+  @Input() currentShift: Shift | null = null;
+  @Input() modalOnly = false;
+  @Output() employeeAdded = new EventEmitter<any>();
+
   searchQuery = '';
   selectedDeptId = '';
 
@@ -79,6 +86,22 @@ export class EmployeeDirectoryComponent {
     { id: 7, name: 'Grace Kim',       position: 'Content Strategist',  department: { id: 2, name: 'Marketing' },        role: 'employee', productivityScore: 8.0,  payRate: 40.00 },
     { id: 8, name: 'Henry Patel',     position: 'DevOps Engineer',     department: { id: 1, name: 'Engineering' },      role: 'employee', productivityScore: 9.3,  payRate: 58.00 }
   ];
+
+  ngOnInit(): void {
+    this.api.employees().subscribe(list => {
+      if (list && list.length) {
+        this.employees = list.map(e => ({
+          id: e.id,
+          name: e.name,
+          position: e.position,
+          department: { id: e.department.id, name: e.department.name },
+          role: (e.role as 'ceo' | 'manager' | 'employee') || 'employee',
+          productivityScore: e.productivity_score,
+          payRate: e.pay_rate
+        }));
+      }
+    });
+  }
 
   private getInitialAddForm(): AddEmployeeForm {
     return {
@@ -233,31 +256,89 @@ export class EmployeeDirectoryComponent {
     this.isAddModalOpen = false;
   }
 
-  saveNewEmployee(): void {
+  async saveNewEmployee(): Promise<void> {
     if (!this.newEmployee.name.trim() || !this.newEmployee.position.trim()) return;
     this.isAdding = true;
 
-    setTimeout(() => {
-      const dept = this.departments.find(d => d.id === Number(this.newEmployee.departmentId)) || {
-        id: Number(this.newEmployee.departmentId),
-        name: 'General'
-      };
+    const dept = this.departments.find(d => d.id === Number(this.newEmployee.departmentId)) || {
+      id: Number(this.newEmployee.departmentId),
+      name: 'General'
+    };
 
-      const nextId = this.employees.length > 0 ? Math.max(...this.employees.map(e => e.id)) + 1 : 1;
+    const payload = {
+      name: this.newEmployee.name.trim(),
+      position: this.newEmployee.position.trim(),
+      department: dept.id,
+      departmentId: dept.id,
+      role: this.newEmployee.role,
+      productivity_score: this.newEmployee.productivityScore !== null && this.newEmployee.productivityScore !== undefined ? Number(this.newEmployee.productivityScore) : null,
+      pay_rate: this.newEmployee.payRate !== null && this.newEmployee.payRate !== undefined ? Number(this.newEmployee.payRate) : null
+    };
 
-      const created: Employee = {
-        id: nextId,
-        name: this.newEmployee.name.trim(),
-        position: this.newEmployee.position.trim(),
-        department: dept,
-        role: this.newEmployee.role,
-        productivityScore: this.newEmployee.productivityScore !== null && this.newEmployee.productivityScore !== undefined ? Number(this.newEmployee.productivityScore) : null,
-        payRate: this.newEmployee.payRate !== null && this.newEmployee.payRate !== undefined ? Number(this.newEmployee.payRate) : null
-      };
+    this.api.addRosterEmployee(payload).subscribe({
+      next: (createdEmp) => {
+        const created: Employee = {
+          id: createdEmp.id,
+          name: createdEmp.name,
+          position: createdEmp.position,
+          department: dept,
+          role: this.newEmployee.role,
+          productivityScore: this.newEmployee.productivityScore !== null && this.newEmployee.productivityScore !== undefined ? Number(this.newEmployee.productivityScore) : null,
+          payRate: this.newEmployee.payRate !== null && this.newEmployee.payRate !== undefined ? Number(this.newEmployee.payRate) : null
+        };
+        this.employees.unshift(created);
 
-      this.employees.unshift(created);
-      this.isAdding = false;
-      this.isAddModalOpen = false;
-    }, 300);
+        if (this.currentShift) {
+          this.api.assign(this.currentShift.id, created.id).subscribe({
+            next: (updatedShift) => {
+              this.isAdding = false;
+              this.isAddModalOpen = false;
+              this.employeeAdded.emit({ employee: created, shift: updatedShift });
+            },
+            error: () => {
+              this.isAdding = false;
+              this.isAddModalOpen = false;
+              this.employeeAdded.emit({ employee: created });
+            }
+          });
+        } else {
+          this.isAdding = false;
+          this.isAddModalOpen = false;
+          this.employeeAdded.emit({ employee: created });
+        }
+      },
+      error: () => {
+        const nextId = this.employees.length > 0 ? Math.max(...this.employees.map(e => e.id)) + 1 : 1;
+        const created: Employee = {
+          id: nextId,
+          name: this.newEmployee.name.trim(),
+          position: this.newEmployee.position.trim(),
+          department: dept,
+          role: this.newEmployee.role,
+          productivityScore: this.newEmployee.productivityScore !== null && this.newEmployee.productivityScore !== undefined ? Number(this.newEmployee.productivityScore) : null,
+          payRate: this.newEmployee.payRate !== null && this.newEmployee.payRate !== undefined ? Number(this.newEmployee.payRate) : null
+        };
+        this.employees.unshift(created);
+
+        if (this.currentShift) {
+          this.api.assign(this.currentShift.id, created.id).subscribe({
+            next: (updatedShift) => {
+              this.isAdding = false;
+              this.isAddModalOpen = false;
+              this.employeeAdded.emit({ employee: created, shift: updatedShift });
+            },
+            error: () => {
+              this.isAdding = false;
+              this.isAddModalOpen = false;
+              this.employeeAdded.emit({ employee: created });
+            }
+          });
+        } else {
+          this.isAdding = false;
+          this.isAddModalOpen = false;
+          this.employeeAdded.emit({ employee: created });
+        }
+      }
+    });
   }
 }

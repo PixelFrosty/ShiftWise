@@ -311,12 +311,13 @@
         <!-- staff controls -->
         @if (canEdit) {
           @if (s.open_count > 0) {
- <div class="flex flex-wrap gap-2 mb-4">
+            <div class="flex flex-wrap gap-2 mb-4">
               <select [(ngModel)]="toAdd" name="toAdd" class="flex-1 h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="add-person">
                 <option [ngValue]="null">Add an employee…</option>
                 @for (p of addable; track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
               </select>
               <button type="button" (click)="addPerson()" [disabled]="!toAdd || busy" class="h-9 px-3 rounded-md text-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer" data-testid="add-person-btn">Add</button>
+              <button type="button" (click)="empDir.openAddModal()" class="h-9 px-3 rounded-md text-sm border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium cursor-pointer" title="Create and add a new employee" data-testid="new-employee-btn">+ New Employee</button>
               <input type="text" [(ngModel)]="newNote" name="newNote" maxlength="500" placeholder="Note for this person (optional) - what should they do?" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="add-note" />
             </div>
           } @else {
@@ -556,4 +557,6 @@
       </form>
     </div>
   }
+
+  <app-employee-directory #empDir [currentShift]="activeShift" [modalOnly]="true" (employeeAdded)="onEmployeeAdded($event)"></app-employee-directory>
 </div>

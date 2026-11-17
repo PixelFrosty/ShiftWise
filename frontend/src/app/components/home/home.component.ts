@@ -35,7 +35,7 @@ const ICON = {
 
         <div class="mt-9 grid gap-5" [style.grid-template-columns]="'repeat(auto-fit, minmax(210px, 1fr))'">
           @for (card of c.cards; track card.title) {
-            <a [routerLink]="card.link" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition p-6 no-underline" [attr.data-testid]="'card-' + card.title.toLowerCase()">
+            <a [routerLink]="card.link" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 hover:scale-[1.03] transition duration-300 ease-out p-6 no-underline" [attr.data-testid]="'card-' + card.title.toLowerCase()">
               <span class="relative inline-flex w-[52px] h-[52px] rounded-xl mb-4 bg-emerald-100 group-hover:bg-emerald-600 transition">
                 <img [src]="card.icon" alt="" class="absolute inset-0 m-auto w-7 h-7 object-contain transition-opacity group-hover:opacity-0" />
                 <img [src]="card.hoverIcon" alt="" class="absolute inset-0 m-auto w-7 h-7 object-contain opacity-0 transition-opacity group-hover:opacity-100" />

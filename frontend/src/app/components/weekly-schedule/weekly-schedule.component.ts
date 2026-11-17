@@ -7,6 +7,7 @@ import { ApiService, AutoScheduleResult, Employee, PostReview, Publication, Shif
 import { AuthService } from '../../core/auth.service';
 import { DepartmentRef, errorText } from '../../core/models';
 import { addDays, formatWeekRange, fromIso, mondayOf, toIso } from '../shared/week-utils';
+import { EmployeeDirectoryComponent } from '../employee-directory/employee-directory.component';
 
 const HOUR_PX = 60;
 const DAY_SHORT = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
@@ -40,7 +41,7 @@ type RequestMode = null | { kind: 'give' | 'take' | 'swap'; person?: ShiftPerson
 @Component({
   selector: 'app-weekly-schedule',
   standalone: true,
-  imports: [RouterLink, FormsModule],
+  imports: [RouterLink, FormsModule, EmployeeDirectoryComponent],
   templateUrl: './weekly-schedule.component.html'
 })
 export class WeeklyScheduleComponent implements OnDestroy {
@@ -347,10 +348,13 @@ export class WeeklyScheduleComponent implements OnDestroy {
   get addable(): Employee[] {
     const shift = this.activeShift;
     if (!shift) { return []; }
-    const on = shift.assignments.map(a => a.employee_id);
-    // people of this department, plus those whose home is elsewhere but who also work here (scheduled by hand)
-    return this.deptPeople().filter(p => (p.department.id === shift.department.id || p.extra_departments.some(d => d.id === shift.department.id))
-                                         && !on.includes(p.id));
+    const on = (shift.assignments || []).map(a => a.employee_id);
+    const shiftDeptId = typeof shift.department === 'object' ? shift.department?.id : shift.department;
+    return this.deptPeople().filter(p => {
+      const pDeptId = typeof p.department === 'object' ? p.department?.id : p.department;
+      const worksInDept = pDeptId === shiftDeptId || (Array.isArray(p.extra_departments) && p.extra_departments.some(d => d.id === shiftDeptId));
+      return worksInDept && !on.includes(p.id);
+    });
   }
 
   // --- panel ---
@@ -366,6 +370,9 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.toAdd = null;
     this.newNote = '';
     this.noteEditId = null;
+    if (!this.deptPeople().length) {
+      this.loadStaffData();
+    }
   }
 
   closePanel(): void { this.outsidePrompt = null; this.panel = null; this.activeShiftId = null; this.panelError = ''; this.requestMode = null; this.confirmPrompt = null; this.confirmed = { timeOff: false, warnings: false }; }
@@ -385,7 +392,15 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.panelError = '';
     const employeeId = Number(this.toAdd);
     this.api.assign(shift.id, employeeId, { timeOff: this.confirmed.timeOff, warnings: this.confirmed.warnings }, this.newNote).subscribe({
-      next: updated => { this.applyUpdated(updated); this.toAdd = null; this.newNote = ''; this.confirmPrompt = null; this.confirmed = { timeOff: false, warnings: false }; },
+      next: updated => {
+        this.applyUpdated(updated);
+        this.toAdd = null;
+        this.newNote = '';
+        this.confirmPrompt = null;
+        this.confirmed = { timeOff: false, warnings: false };
+        this.closePanel();
+        this.reload();
+      },
       error: (err: HttpErrorResponse) => {
         this.busy = false;
         if (err.status === 409 && err.error?.code === 'time_off_approved') {
@@ -395,6 +410,14 @@ export class WeeklyScheduleComponent implements OnDestroy {
         } else { this.confirmed = { timeOff: false, warnings: false }; this.fail(err); }
       }
     });
+  }
+
+  onEmployeeAdded(event: any): void {
+    if (event?.shift) {
+      this.applyUpdated(event.shift);
+    }
+    this.closePanel();
+    this.reload();
   }
 
   /** Yes/No on a warning (approved time off, hour limits, minors). Yes asks again with that warning confirmed. */

@@ -112,7 +112,7 @@
       "responses": [
         {
           "uuid": "resp-employees",
-          "body": "[\n  {\n    \"id\": 1,\n    \"name\": \"Carol Williams\",\n    \"first_name\": \"Carol\",\n    \"last_name\": \"Williams\",\n    \"email\": \"manager1@shiftwise.com\",\n    \"role\": \"manager\",\n    \"position\": \"Operations Manager\",\n    \"department\": 1,\n    \"department_name\": \"Operations\",\n    \"productivity_score\": 9.0,\n    \"pay_rate\": 62.00,\n    \"is_roster\": false\n  },\n  {\n    \"id\": 2,\n    \"name\": \"Alice Johnson\",\n    \"first_name\": \"Alice\",\n    \"last_name\": \"Johnson\",\n    \"email\": \"emp1@shiftwise.com\",\n    \"role\": \"employee\",\n    \"position\": \"Senior Developer\",\n    \"department\": 2,\n    \"department_name\": \"Engineering\",\n    \"productivity_score\": 8.5,\n    \"pay_rate\": 55.00,\n    \"is_roster\": false\n  },\n  {\n    \"id\": 3,\n    \"name\": \"Bob Smith\",\n    \"first_name\": \"Bob\",\n    \"last_name\": \"Smith\",\n    \"email\": \"emp2@shiftwise.com\",\n    \"role\": \"employee\",\n    \"position\": \"Floor Associate\",\n    \"department\": 1,\n    \"department_name\": \"Operations\",\n    \"productivity_score\": 7.0,\n    \"pay_rate\": 35.00,\n    \"is_roster\": false\n  }\n]",
+          "body": "[\n  {\n    \"id\": 1,\n    \"name\": \"Carol Williams\",\n    \"first_name\": \"Carol\",\n    \"last_name\": \"Williams\",\n    \"email\": \"manager1@shiftwise.com\",\n    \"role\": \"manager\",\n    \"position\": \"Operations Manager\",\n    \"department\": { \"id\": 1, \"name\": \"Operations\" },\n    \"extra_departments\": [],\n    \"productivity_score\": 9.0,\n    \"pay_rate\": 62.00,\n    \"is_roster\": false\n  },\n  {\n    \"id\": 2,\n    \"name\": \"Alice Johnson\",\n    \"first_name\": \"Alice\",\n    \"last_name\": \"Johnson\",\n    \"email\": \"emp1@shiftwise.com\",\n    \"role\": \"employee\",\n    \"position\": \"Senior Developer\",\n    \"department\": { \"id\": 2, \"name\": \"Engineering\" },\n    \"extra_departments\": [{ \"id\": 1, \"name\": \"Operations\" }],\n    \"productivity_score\": 8.5,\n    \"pay_rate\": 55.00,\n    \"is_roster\": false\n  },\n  {\n    \"id\": 3,\n    \"name\": \"Bob Smith\",\n    \"first_name\": \"Bob\",\n    \"last_name\": \"Smith\",\n    \"email\": \"emp2@shiftwise.com\",\n    \"role\": \"employee\",\n    \"position\": \"Floor Associate\",\n    \"department\": { \"id\": 1, \"name\": \"Operations\" },\n    \"extra_departments\": [],\n    \"productivity_score\": 7.0,\n    \"pay_rate\": 35.00,\n    \"is_roster\": false\n  }\n]",
           "latency": 0,
           "statusCode": 200,
           "label": "Employees List",
@@ -131,7 +131,7 @@
       "responses": [
         {
           "uuid": "resp-shifts",
-          "body": "[]",
+          "body": "[\n  {\n    \"id\": 1,\n    \"department\": { \"id\": 1, \"name\": \"Operations\" },\n    \"name\": \"Morning Shift\",\n    \"shift_date\": \"2026-11-09\",\n    \"start_time\": \"09:00\",\n    \"end_time\": \"13:00\",\n    \"headcount\": 1,\n    \"outside_hours\": false,\n    \"open_count\": 0,\n    \"assignments\": [\n      { \"id\": 1, \"employee_id\": 3, \"name\": \"Bob Smith\", \"is_roster\": false, \"is_minor\": false, \"note\": \"Opening register\" }\n    ]\n  },\n  {\n    \"id\": 2,\n    \"department\": { \"id\": 1, \"name\": \"Operations\" },\n    \"name\": \"Mid Shift\",\n    \"shift_date\": \"2026-11-11\",\n    \"start_time\": \"10:00\",\n    \"end_time\": \"16:00\",\n    \"headcount\": 2,\n    \"outside_hours\": false,\n    \"open_count\": 1,\n    \"assignments\": [\n      { \"id\": 2, \"employee_id\": 1, \"name\": \"Carol Williams\", \"is_roster\": false, \"is_minor\": false, \"note\": \"Supervisor\" }\n    ]\n  }\n]",
           "latency": 0,
           "statusCode": 200,
           "label": "Shifts List",
@@ -254,6 +254,158 @@
           ]
         }
       ]
+    },
+    {
+      "uuid": "route-create-shift",
+      "type": "http",
+      "documentation": "Create Shift",
+      "method": "post",
+      "endpoint": "shifts/",
+      "responses": [
+        {
+          "uuid": "resp-create-shift",
+          "body": "{\n  \"id\": 101,\n  \"department\": 1,\n  \"department_name\": \"Operations\",\n  \"name\": \"Morning\",\n  \"shift_date\": \"2026-11-16\",\n  \"start_time\": \"09:00:00\",\n  \"end_time\": \"13:00:00\",\n  \"people_needed\": 1,\n  \"assignments\": []\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Shift Created",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-create-timeoff",
+      "type": "http",
+      "documentation": "Create Time Off",
+      "method": "post",
+      "endpoint": "time-off/",
+      "responses": [
+        {
+          "uuid": "resp-create-timeoff",
+          "body": "{\n  \"id\": 101,\n  \"employee\": 1,\n  \"employee_name\": \"Carol Williams\",\n  \"start_date\": \"2026-11-17\",\n  \"end_date\": \"2026-11-19\",\n  \"reason\": \"Requested\",\n  \"status\": \"pending\"\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Time Off Created",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-create-code",
+      "type": "http",
+      "documentation": "Create Join Code",
+      "method": "post",
+      "endpoint": "join-codes/",
+      "responses": [
+        {
+          "uuid": "resp-create-code",
+          "body": "{\n  \"id\": 101,\n  \"code\": \"SW-OP-7731\",\n  \"role\": \"employee\",\n  \"departments\": [{ \"id\": 1, \"name\": \"Operations\" }],\n  \"status\": \"unused\",\n  \"created_by\": \"Carol Williams\",\n  \"used_by\": null,\n  \"created_at\": \"2026-11-17T16:25:00Z\",\n  \"used_at\": null\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Join Code Created",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-shift-templates",
+      "type": "http",
+      "documentation": "Shift Templates",
+      "method": "get",
+      "endpoint": "shift-templates/",
+      "responses": [
+        {
+          "uuid": "resp-templates",
+          "body": "[]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Templates",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-assign-shift",
+      "type": "http",
+      "documentation": "Assign Employee to Shift",
+      "method": "post",
+      "endpoint": "shifts/:id/assign/",
+      "responses": [
+        {
+          "uuid": "resp-assign-shift",
+          "body": "{\n  \"id\": 2,\n  \"department\": { \"id\": 1, \"name\": \"Operations\" },\n  \"name\": \"Mid Shift\",\n  \"shift_date\": \"2026-11-11\",\n  \"start_time\": \"10:00\",\n  \"end_time\": \"16:00\",\n  \"headcount\": 2,\n  \"outside_hours\": false,\n  \"open_count\": 0,\n  \"assignments\": [\n    { \"id\": 2, \"employee_id\": 1, \"name\": \"Carol Williams\", \"is_roster\": false, \"is_minor\": false, \"note\": \"Supervisor\" },\n    { \"id\": 102, \"employee_id\": 2, \"name\": \"Alice Johnson\", \"is_roster\": false, \"is_minor\": false, \"note\": \"\" }\n  ]\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Shift Assigned",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-unassign-shift",
+      "type": "http",
+      "documentation": "Unassign Employee from Shift",
+      "method": "post",
+      "endpoint": "shifts/:id/unassign/",
+      "responses": [
+        {
+          "uuid": "resp-unassign-shift",
+          "body": "{\n  \"id\": 2,\n  \"department\": { \"id\": 1, \"name\": \"Operations\" },\n  \"name\": \"Mid Shift\",\n  \"shift_date\": \"2026-11-11\",\n  \"start_time\": \"10:00\",\n  \"end_time\": \"16:00\",\n  \"headcount\": 2,\n  \"outside_hours\": false,\n  \"open_count\": 1,\n  \"assignments\": [\n    { \"id\": 2, \"employee_id\": 1, \"name\": \"Carol Williams\", \"is_roster\": false, \"is_minor\": false, \"note\": \"Supervisor\" }\n  ]\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Shift Unassigned",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-create-employee",
+      "type": "http",
+      "documentation": "Create Employee",
+      "method": "post",
+      "endpoint": "employees/",
+      "responses": [
+        {
+          "uuid": "resp-create-employee",
+          "body": "{\n  \"id\": 10,\n  \"name\": \"New Employee\",\n  \"first_name\": \"New\",\n  \"last_name\": \"Employee\",\n  \"email\": \"new@shiftwise.com\",\n  \"role\": \"employee\",\n  \"position\": \"Associate\",\n  \"department\": { \"id\": 1, \"name\": \"Operations\" },\n  \"extra_departments\": [],\n  \"productivity_score\": 7.0,\n  \"pay_rate\": 25.00,\n  \"is_roster\": true\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Employee Created",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-auto-schedule",
+      "type": "http",
+      "documentation": "Auto Schedule",
+      "method": "post",
+      "endpoint": "shifts/auto-schedule/",
+      "responses": [
+        {
+          "uuid": "resp-auto-schedule",
+          "body": "{\n  \"assigned_count\": 0,\n  \"shifts_filled\": 0,\n  \"unfilled_shifts\": 0,\n  \"warnings\": []\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Auto Schedule Result",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
     }
   ],
   "rootChildren": [
@@ -269,7 +421,15 @@
     { "type": "route", "uuid": "route-projects" },
     { "type": "route", "uuid": "route-timeoff" },
     { "type": "route", "uuid": "route-codes" },
-    { "type": "route", "uuid": "route-compat" }
+    { "type": "route", "uuid": "route-compat" },
+    { "type": "route", "uuid": "route-create-shift" },
+    { "type": "route", "uuid": "route-create-timeoff" },
+    { "type": "route", "uuid": "route-create-code" },
+    { "type": "route", "uuid": "route-shift-templates" },
+    { "type": "route", "uuid": "route-assign-shift" },
+    { "type": "route", "uuid": "route-unassign-shift" },
+    { "type": "route", "uuid": "route-create-employee" },
+    { "type": "route", "uuid": "route-auto-schedule" }
   ],
   "cors": true,
   "headers": [
