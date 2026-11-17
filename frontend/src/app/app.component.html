@@ -12,73 +12,62 @@
                     class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer flex items-center justify-center"
                     aria-label="Toggle navigation menu">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 6h16M4 12h16M4 18h16"></path>
               </svg>
             </button>
-
             @if (isMenuOpen) {
               <!-- Backdrop to close on click outside -->
               <div class="fixed inset-0 z-40" (click)="closeMenu()"></div>
-
               <div class="absolute left-0 mt-2 w-48 rounded-xl bg-white border border-slate-200 shadow-lg py-1.5 z-50">
                 @if (isAuthenticated) {
-                  <button (click)="onLogout(); closeMenu()" class="w-full text-left block px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 font-medium cursor-pointer">
-                    Log Out
-                  </button>
+                  <!-- Navigation links now live inside the hamburger menu -->
+                  <nav class="flex flex-col space-y-2">
+                    <a routerLink="/home"
+                       routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
+                       
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
+                      Dashboard
+                    </a>
+                    @if (isManagerOrCeo) {
+                      <a routerLink="/employees"
+                         routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
+                         class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
+                        Employees
+                      </a>
+                    }
+                    <a routerLink="/schedules"
+                       routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
+                      Schedules
+                    </a>
+                    <a routerLink="/time-off"
+                       routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
+                      Time Off
+                    </a>
+                  </nav>
                 } @else {
-                  <a routerLink="/" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
-                    Log In
+                  <!-- Not logged in – just show a Sign‑In link -->
+                  <a routerLink="/"
+                     (click)="closeMenu()"
+                     class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
+                    Sign In
                   </a>
                 }
-                <a href="#" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
-                  About Us
-                </a>
-                <a href="#" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
-                  Contact
-                </a>
               </div>
             }
           </div>
-
-          @if (isAuthenticated) {
-            <nav class="hidden md:flex space-x-4">
-              <a routerLink="/home"
-                 routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 [routerLinkActiveOptions]="{ exact: true }"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                Dashboard
-              </a>
-
-              @if (isManagerOrCeo) {
-                <a routerLink="/employees"
-                   routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                  Employees
-                </a>
-              }
-
-              <a routerLink="/schedules"
-                 routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                Schedules
-              </a>
-              <a routerLink="/time-off"
-                 routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                Time Off
-              </a>
-            </nav>
-          }
+          <!-- No top‑bar navigation links any more – they’re all inside the hamburger menu -->
         </div>
-
-        <!-- Center: ShiftWise Logo (Takes you to landing page) -->
+        <!-- Center: ShiftWise Logo (still centered) -->
         <div class="absolute left-1/2 transform -translate-x-1/2">
-          <a routerLink="/" class="flex items-center space-x-2 text-xl font-bold text-slate-800 tracking-tight no-underline">
+          <a routerLink="/"
+             class="flex items-center space-x-2 text-xl font-bold text-slate-800 tracking-tight no-underline">
             <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600 text-white font-black text-lg">S</span>
             <span>Shift<span class="text-emerald-600">Wise</span></span>
           </a>
         </div>
-
         <!-- Right: User Controls / Auth Status -->
         <div class="flex items-center space-x-4">
           @if (currentUser) {
@@ -95,7 +84,8 @@
                   }
                 </div>
               </div>
-              <button (click)="onLogout()" type="button" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-sm font-medium transition shadow-sm cursor-pointer">
+              <button (click)="onLogout()" type="button"
+                      class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-sm font-medium transition shadow-sm cursor-pointer">
                 Sign Out
               </button>
             </div>
@@ -108,12 +98,12 @@
       </div>
     </div>
   </header>
-
   <!-- Global Notifications -->
   @if (notifications.length > 0) {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 w-full">
       @for (message of notifications; track message.id) {
-        <div class="p-4 mb-3 rounded-lg border text-sm font-medium flex items-center justify-between"
+        <div class="p-4 mb-3 rounded-lg border text-sm font-medium flex items-center justify-between
+                    bg-emerald-50 border-emerald-200 text-emerald-800"
              [class.bg-emerald-50]="message.type === 'success'"
              [class.border-emerald-200]="message.type === 'success'"
              [class.text-emerald-800]="message.type === 'success'"
@@ -127,19 +117,18 @@
              [class.border-blue-200]="message.type === 'info'"
              [class.text-blue-800]="message.type === 'info'">
           <span>{{ message.text }}</span>
-          <button (click)="dismissNotification(message.id)" class="text-slate-400 hover:text-slate-600 text-lg font-bold ml-4 leading-none cursor-pointer">&times;</button>
+          <button (click)="dismissNotification(message.id)"
+                  class="text-slate-400 hover:text-slate-600 text-lg font-bold ml-4 leading-none cursor-pointer">&times;</button>
         </div>
       }
     </div>
   }
-
-  <!-- Main Content Area: Replaces {% block content %} -->
+  <!-- Main Content Area -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <router-outlet />
   </main>
-
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-4 mt-auto text-center text-xs text-slate-500">
-    <p>ShiftWise &bull; Intelligent Workforce Scheduling Platform</p>
+    <p>ShiftWise • Intelligent Workforce Scheduling Platform</p>
   </footer>
 </div>

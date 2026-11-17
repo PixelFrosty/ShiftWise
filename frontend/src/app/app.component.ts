@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterOutlet } from '@angular/router';
 import { AuthService } from './core/auth.service';
 import { Role } from './core/models';
 
@@ -17,7 +17,7 @@ export interface NotificationMessage {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
 })
@@ -50,7 +50,12 @@ export class AppComponent {
   }
 
   notifications: NotificationMessage[] = [];
-  isMenuOpen = false;
+  isProfileMenuOpen = false;
+
+  toggleProfileMenu(): void {
+    this.isProfileMenuOpen = !this.isProfileMenuOpen;
+  }
+
 
   toggleMenu(): void {
     this.isMenuOpen = !this.isMenuOpen;
