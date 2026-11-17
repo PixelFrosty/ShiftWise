@@ -7,7 +7,6 @@ import { mondayOf, toIso } from '../shared/week-utils';
 interface HomeCard { title: string; text: string; link: string; cta: string; icon: string; primary?: boolean; }
 
 interface HomeConfig {
-  eyebrow: string;
   subtitle: string;
   cards: HomeCard[];
   banner: { title: string; text: string; secondary?: { label: string; link: string }; primary: { label: string; link: string } };
@@ -30,7 +29,6 @@ const ICON = {
   template: `
     @if (config(); as c) {
       <section class="max-w-6xl mx-auto py-6">
-        <span class="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold tracking-wider" data-testid="eyebrow">{{ c.eyebrow }}</span>
         <h1 class="mt-5 text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900" data-testid="welcome">Welcome back, {{ firstName() }}</h1>
         <p class="mt-2 text-lg text-slate-600">{{ c.subtitle }}</p>
 
@@ -76,7 +74,6 @@ export class HomeComponent {
     const role: Role | undefined = this.auth.role;
     if (role === 'employee') {
       return {
-        eyebrow: 'EMPLOYEE HOME',
         subtitle: 'Check your shifts, request time off and keep your availability up to date.',
         cards: [
           { title: 'Schedules', text: "See your upcoming shifts and the week's open shifts.", link: '/schedules', cta: 'View my schedule', icon: ICON.calendar, primary: true },
@@ -88,7 +85,6 @@ export class HomeComponent {
     }
     if (role === 'manager') {
       return {
-        eyebrow: 'MANAGER DASHBOARD',
         subtitle: 'Keep your team scheduled and covered. Choose an area to get started.',
         cards: [
           { title: 'Schedules', text: 'Build, review and publish weekly schedules for your team.', link: '/schedules', cta: 'Open schedules', icon: ICON.calendar, primary: true },
@@ -102,7 +98,6 @@ export class HomeComponent {
     }
     if (role === 'ceo') {
       return {
-        eyebrow: 'ADMIN DASHBOARD',
         subtitle: 'Everything you need to run your workforce, one click away. Choose an area to get started.',
         cards: [
           { title: 'Schedules', text: 'Build, review and publish weekly schedules across every department.', link: '/schedules', cta: 'Open schedules', icon: ICON.calendar, primary: true },
