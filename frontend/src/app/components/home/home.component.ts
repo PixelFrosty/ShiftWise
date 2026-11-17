@@ -12,21 +12,15 @@ interface HomeConfig {
   banner: { title: string; text: string; secondary?: { label: string; link: string }; primary: { label: string; link: string } };
 }
 
-const IMG = {
-  calendar: '/icon_calendar.png',
-  timeOff: '/icon_tomeoff.png',
-  employee: '/icon_employee.png',
-  code: '/icon_code.png'
-};
 
 // Simple outline icons (24x24 paths)
 const ICON = {
-  calendar: 'M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z',
-  timeOff: 'M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1zm5 8l4 4m0-4l-4 4',
-  clock: 'M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z',
-  people: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-7.13a4 4 0 11-8 0 4 4 0 018 0zm6 2a3 3 0 11-6 0',
-  key: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.74 5.74L11 17H9v2H7v2H3v-3.59l6.26-6.26A6 6 0 1121 9z',
-  org: 'M12 4v4m0 0a2 2 0 100 4m0-4a2 2 0 110 4m0 0v3m-6 0h12M6 15v3m12-3v3m-12 0a2 2 0 100 4 2 2 0 000-4zm12 0a2 2 0 100 4 2 2 0 000-4z'
+  calendar: '/icon_calendar.png',
+  timeOff: '/icon_timeoff.png',
+  clock: '/icon_clock.png',
+  people: '/icon_employee.png',
+  key: '/icon_code.png',
+  org: '/icon_org.png'
 };
 
 @Component({
@@ -42,10 +36,8 @@ const ICON = {
         <div class="mt-9 grid gap-5" [style.grid-template-columns]="'repeat(auto-fit, minmax(210px, 1fr))'">
           @for (card of c.cards; track card.title) {
             <a [routerLink]="card.link" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 transition p-6 no-underline" [attr.data-testid]="'card-' + card.title.toLowerCase()">
-              <span class="inline-flex items-center justify-center w-13 h-13 rounded-xl mb-4 p-3"
-                    [class.bg-emerald-600]="card.primary" [class.text-white]="card.primary"
-                    [class.bg-emerald-100]="!card.primary" [class.text-emerald-700]="!card.primary">
-                <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path [attr.d]="card.icon"></path></svg>
+              <span class="inline-flex items-center justify-center w-13 h-13 rounded-xl mb-4 p-3 bg-emerald-100 group-hover:bg-emerald-600 transition">
+                <img [src]="card.icon" alt="" class="w-7 h-7 object-contain" />
               </span>
               <h2 class="text-xl font-bold text-slate-900">{{ card.title }}</h2>
               <p class="mt-1.5 text-sm text-slate-500 leading-relaxed">{{ card.text }}</p>
