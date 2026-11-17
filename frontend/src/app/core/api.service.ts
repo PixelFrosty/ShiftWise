@@ -409,11 +409,20 @@ export class ApiService {
         const localMap = new Map(local.map(s => [s.id, s]));
         const combined = apiList
           .filter(s => !deletedIds.has(s.id))
-          .map(s => localMap.get(s.id) || s);
+          .map(s => {
+            const shift = localMap.get(s.id) || s;
+            return {
+              ...shift,
+              open_count: Math.max(0, (shift.headcount ?? 1) - (shift.assignments?.length ?? 0))
+            };
+          });
         for (const s of local) {
           if (!combined.some(c => c.id === s.id)) {
             if (department === null || s.department?.id === department) {
-              combined.push(s);
+              combined.push({
+                ...s,
+                open_count: Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0))
+              });
             }
           }
         }
@@ -445,20 +454,29 @@ export class ApiService {
             shift_date: '2026-11-11',
             start_time: '10:00',
             end_time: '16:00',
-            headcount: 2,
+            headcount: 1,
             outside_hours: false,
-            open_count: 1,
+            open_count: 0,
             assignments: [
               { id: 2, employee_id: 1, name: 'Carol Williams', is_roster: false, is_minor: false, note: 'Supervisor' }
             ]
           }
         ].filter(s => !deletedIds.has(s.id));
         const localMap = new Map(local.map(s => [s.id, s]));
-        const combined = fallback.map(s => localMap.get(s.id) || s);
+        const combined = fallback.map(s => {
+          const shift = localMap.get(s.id) || s;
+          return {
+            ...shift,
+            open_count: Math.max(0, (shift.headcount ?? 1) - (shift.assignments?.length ?? 0))
+          };
+        });
         for (const s of local) {
           if (!combined.some(c => c.id === s.id)) {
             if (department === null || s.department?.id === department) {
-              combined.push(s);
+              combined.push({
+                ...s,
+                open_count: Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0))
+              });
             }
           }
         }

@@ -244,8 +244,8 @@ export class WeeklyScheduleComponent implements OnDestroy {
     return result;
   });
 
-  scheduledSlots = computed(() => this.visibleShifts().reduce((n, s) => n + s.assignments.length, 0));
-  openSlots = computed(() => this.visibleShifts().reduce((n, s) => n + s.open_count, 0));
+  scheduledSlots = computed(() => this.visibleShifts().reduce((n, s) => n + (s.assignments?.length || 0), 0));
+  openSlots = computed(() => this.visibleShifts().reduce((n, s) => n + Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0)), 0));
 
   /** Hours the viewer is scheduled for in the shown week (all of their shifts, whatever is expanded). */
   myHours = computed(() => {
@@ -261,7 +261,9 @@ export class WeeklyScheduleComponent implements OnDestroy {
       .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time) || toMinutes(a.end_time) - toMinutes(b.end_time))
   })));
 
-  openOnDay(iso: string): number { return this.visibleShifts().filter(s => s.shift_date === iso).reduce((n, s) => n + s.open_count, 0); }
+  openOnDay(iso: string): number {
+    return this.visibleShifts().filter(s => s.shift_date === iso).reduce((n, s) => n + Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0)), 0);
+  }
   hasShifts(iso: string): boolean { return this.visibleShifts().some(s => s.shift_date === iso); }
 
   dayName(iso: string): string { return DAY_LONG[(new Date(iso + 'T00:00:00').getDay() + 6) % 7]; }
