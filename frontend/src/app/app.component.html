@@ -21,9 +21,15 @@
               <div class="fixed inset-0 z-40" (click)="closeMenu()"></div>
 
               <div class="absolute left-0 mt-2 w-48 rounded-xl bg-white border border-slate-200 shadow-lg py-1.5 z-50">
-                <a routerLink="/" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
-                  Log In
-                </a>
+                @if (isAuthenticated) {
+                  <button (click)="onLogout(); closeMenu()" class="w-full text-left block px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 font-medium cursor-pointer">
+                    Log Out
+                  </button>
+                } @else {
+                  <a routerLink="/" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
+                    Log In
+                  </a>
+                }
                 <a href="#" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
                   About Us
                 </a>
@@ -36,7 +42,7 @@
 
           @if (isAuthenticated) {
             <nav class="hidden md:flex space-x-4">
-              <a routerLink="/dashboard"
+              <a routerLink="/home"
                  routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
                  [routerLinkActiveOptions]="{ exact: true }"
                  class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
@@ -48,11 +54,6 @@
                    routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
                    class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
                   Employees
-                </a>
-                <a routerLink="/compatibility"
-                   routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                  Compatibility
                 </a>
               }
 
@@ -80,27 +81,27 @@
 
         <!-- Right: User Controls / Auth Status -->
         <div class="flex items-center space-x-4">
-          @if (isAuthenticated && currentUser) {
+          @if (currentUser) {
             <div class="flex items-center space-x-3">
               <div class="text-right hidden sm:block">
                 <div class="text-sm font-semibold text-slate-800">{{ currentUser.username }}</div>
                 <div class="text-xs">
-                  @if (currentUser.role === 'CEO') {
+                  @if (currentUser.role === 'ceo') {
                     <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">CEO</span>
-                  } @else if (currentUser.role === 'MANAGER') {
+                  } @else if (currentUser.role === 'manager') {
                     <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Manager</span>
                   } @else {
                     <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Employee</span>
                   }
                 </div>
               </div>
-              <button (click)="onLogout()" type="button" class="px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-md text-xs font-medium transition cursor-pointer">
+              <button (click)="onLogout()" type="button" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-sm font-medium transition shadow-sm cursor-pointer">
                 Sign Out
               </button>
             </div>
           } @else {
-            <a routerLink="/register" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition shadow-sm no-underline">
-              Sign Up
+            <a routerLink="/" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition shadow-sm no-underline">
+              Sign In
             </a>
           }
         </div>

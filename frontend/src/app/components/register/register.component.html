@@ -3,7 +3,7 @@
     <div class="text-center mb-6">
       <h2 class="text-2xl font-bold text-slate-900 mb-1">Create New Account</h2>
       <p class="text-sm text-slate-500">
-        Already Registered? <a routerLink="/" class="text-emerald-600 hover:text-emerald-700 font-semibold underline">Click here to log in</a>
+        Already Registered? <a href="#" (click)="goToLogin($event)" class="text-emerald-600 hover:text-emerald-700 font-semibold underline">Click here to log in</a>
       </p>
     </div>
 
@@ -48,9 +48,15 @@
         <input type="password" id="confirm-password" class="w-full h-10 bg-slate-50 border border-slate-300 rounded-md px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/20" />
       </div>
 
-      <button type="submit" class="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow-sm transition cursor-pointer">
-        Sign Up
-      </button>
+      @if (!isAuthenticated) {
+        <button type="submit" class="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow-sm transition cursor-pointer">
+          Sign Up
+        </button>
+      } @else {
+        <button type="button" (click)="logoutNow($event)" class="w-full h-11 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-md shadow-sm transition cursor-pointer">
+          Log Out
+        </button>
+      }
     </form>
   </div>
 </div>

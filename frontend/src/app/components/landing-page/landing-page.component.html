@@ -5,15 +5,40 @@
       <p class="text-sm text-slate-500">Sign in to access your scheduling portal</p>
     </div>
 
+    @if (justRegistered) {
+      <div class="p-2.5 mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-sm font-medium text-center">
+        Account created! Sign in below.
+      </div>
+    }
+
     <form (ngSubmit)="onLogin($event)" class="space-y-4">
       <div>
         <label for="email" class="block text-sm font-bold text-slate-700 mb-1.5">Email</label>
-        <input type="email" id="email" class="w-full h-10 bg-slate-50 border border-slate-300 rounded-md px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/20" />
+        <input
+          type="email"
+          id="email"
+          name="email"
+          autocomplete="email"
+          [(ngModel)]="email"
+          (ngModelChange)="clearError()"
+          class="w-full h-10 bg-slate-50 border border-slate-300 rounded-md px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+          placeholder="e.g. manager1@shiftwise.com"
+          required
+        />
       </div>
 
       <div>
         <label for="password" class="block text-sm font-bold text-slate-700 mb-1.5">Password</label>
-        <input type="password" id="password" class="w-full h-10 bg-slate-50 border border-slate-300 rounded-md px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/20" />
+        <input
+          type="password"
+          id="password"
+          name="password"
+          autocomplete="current-password"
+          [(ngModel)]="password"
+          (ngModelChange)="clearError()"
+          class="w-full h-10 bg-slate-50 border border-slate-300 rounded-md px-3 text-sm text-slate-900 outline-none transition focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+          required
+        />
       </div>
 
       @if (hasError) {
@@ -29,8 +54,12 @@
         <a routerLink="/forgot-password" class="text-slate-600 hover:text-emerald-600 underline text-sm">Forgot password?</a>
       </div>
 
-      <button type="submit" class="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow-sm transition cursor-pointer">
-        Sign In
+      <button
+        type="submit"
+        [disabled]="isSubmitting"
+        class="w-full h-11 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-default text-white font-semibold rounded-md shadow-sm transition cursor-pointer"
+      >
+        {{ isSubmitting ? 'Signing in…' : 'Sign In' }}
       </button>
     </form>
   </div>

@@ -1,0 +1,280 @@
+{
+  "uuid": "shiftwise-mockoon-env-001",
+  "lastMigration": 32,
+  "name": "ShiftWise Mockoon API",
+  "endpointPrefix": "api",
+  "latency": 0,
+  "port": 3000,
+  "hostname": "0.0.0.0",
+  "folders": [],
+  "routes": [
+    {
+      "uuid": "route-login",
+      "type": "http",
+      "documentation": "User Login",
+      "method": "post",
+      "endpoint": "login/",
+      "responses": [
+        {
+          "uuid": "resp-login",
+          "body": "{\n  \"access\": \"eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJzdWIiOiAiMSIsICJlbWFpbCI6ICJtYW5hZ2VyMUBzaGlmdHdpc2UuY29tIiwgInJvbGUiOiAibWFuYWdlciIsICJleHAiOiAyMDgwMDAwMDAwfQ.mock_signature\",\n  \"refresh\": \"eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJzdWIiOiAiMSIsICJlbWFpbCI6ICJtYW5hZ2VyMUBzaGlmdHdpc2UuY29tIiwgInJvbGUiOiAibWFuYWdlciIsICJleHAiOiAyMDgwMDAwMDAwfQ.mock_signature\"\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Login Success",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-me",
+      "type": "http",
+      "documentation": "Current User & Company Profile",
+      "method": "get",
+      "endpoint": "me/",
+      "responses": [
+        {
+          "uuid": "resp-me",
+          "body": "{\n  \"id\": 1,\n  \"email\": \"manager1@shiftwise.com\",\n  \"username\": \"manager1\",\n  \"first_name\": \"Carol\",\n  \"last_name\": \"Williams\",\n  \"profile\": {\n    \"id\": 1,\n    \"role\": \"manager\",\n    \"company\": {\n      \"id\": 1,\n      \"name\": \"ShiftWise Demo Inc.\",\n      \"open_time\": \"08:00:00\",\n      \"close_time\": \"18:00:00\"\n    },\n    \"department\": {\n      \"id\": 1,\n      \"name\": \"Operations\"\n    },\n    \"extra_departments\": [],\n    \"managed_departments\": [\n      { \"id\": 1, \"name\": \"Operations\" },\n      { \"id\": 2, \"name\": \"Engineering\" }\n    ],\n    \"can_edit_schedule\": true\n  },\n  \"unread_notifications\": 1\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Me Profile",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-refresh",
+      "type": "http",
+      "documentation": "Token Refresh",
+      "method": "post",
+      "endpoint": "token/refresh/",
+      "responses": [
+        {
+          "uuid": "resp-refresh",
+          "body": "{\n  \"access\": \"eyJhbGciOiAiSFMyNTYiLCAidHlwIjogIkpXVCJ9.eyJzdWIiOiAiMSIsICJlbWFpbCI6ICJtYW5hZ2VyMUBzaGlmdHdpc2UuY29tIiwgInJvbGUiOiAibWFuYWdlciIsICJleHAiOiAyMDgwMDAwMDAwfQ.mock_signature\"\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Token Refreshed",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-logout",
+      "type": "http",
+      "documentation": "Logout",
+      "method": "post",
+      "endpoint": "logout/",
+      "responses": [
+        {
+          "uuid": "resp-logout",
+          "body": "{}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Logged Out",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-departments",
+      "type": "http",
+      "documentation": "List Departments",
+      "method": "get",
+      "endpoint": "departments/",
+      "responses": [
+        {
+          "uuid": "resp-departments",
+          "body": "[\n  { \"id\": 1, \"name\": \"Operations\" },\n  { \"id\": 2, \"name\": \"Engineering\" },\n  { \"id\": 3, \"name\": \"Marketing\" }\n]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Departments List",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-employees",
+      "type": "http",
+      "documentation": "List Employees",
+      "method": "get",
+      "endpoint": "employees/",
+      "responses": [
+        {
+          "uuid": "resp-employees",
+          "body": "[\n  {\n    \"id\": 1,\n    \"name\": \"Carol Williams\",\n    \"first_name\": \"Carol\",\n    \"last_name\": \"Williams\",\n    \"email\": \"manager1@shiftwise.com\",\n    \"role\": \"manager\",\n    \"position\": \"Operations Manager\",\n    \"department\": 1,\n    \"department_name\": \"Operations\",\n    \"productivity_score\": 9.0,\n    \"pay_rate\": 62.00,\n    \"is_roster\": false\n  },\n  {\n    \"id\": 2,\n    \"name\": \"Alice Johnson\",\n    \"first_name\": \"Alice\",\n    \"last_name\": \"Johnson\",\n    \"email\": \"emp1@shiftwise.com\",\n    \"role\": \"employee\",\n    \"position\": \"Senior Developer\",\n    \"department\": 2,\n    \"department_name\": \"Engineering\",\n    \"productivity_score\": 8.5,\n    \"pay_rate\": 55.00,\n    \"is_roster\": false\n  },\n  {\n    \"id\": 3,\n    \"name\": \"Bob Smith\",\n    \"first_name\": \"Bob\",\n    \"last_name\": \"Smith\",\n    \"email\": \"emp2@shiftwise.com\",\n    \"role\": \"employee\",\n    \"position\": \"Floor Associate\",\n    \"department\": 1,\n    \"department_name\": \"Operations\",\n    \"productivity_score\": 7.0,\n    \"pay_rate\": 35.00,\n    \"is_roster\": false\n  }\n]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Employees List",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-shifts",
+      "type": "http",
+      "documentation": "List Shifts",
+      "method": "get",
+      "endpoint": "shifts/",
+      "responses": [
+        {
+          "uuid": "resp-shifts",
+          "body": "[]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Shifts List",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-shifts-pub",
+      "type": "http",
+      "documentation": "Shift Publication Status",
+      "method": "get",
+      "endpoint": "shifts/publication/",
+      "responses": [
+        {
+          "uuid": "resp-shifts-pub",
+          "body": "{\n  \"published\": true,\n  \"week_start\": \"2026-11-16\"\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Publication",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-notifications",
+      "type": "http",
+      "documentation": "List Notifications",
+      "method": "get",
+      "endpoint": "notifications/",
+      "responses": [
+        {
+          "uuid": "resp-notifications",
+          "body": "[\n  {\n    \"id\": 1,\n    \"message\": \"Welcome to ShiftWise! Your scheduling portal is active.\",\n    \"read\": false,\n    \"created_at\": \"2026-11-16T12:00:00Z\"\n  }\n]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Notifications List",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-projects",
+      "type": "http",
+      "documentation": "List Projects",
+      "method": "get",
+      "endpoint": "projects/",
+      "responses": [
+        {
+          "uuid": "resp-projects",
+          "body": "[]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Projects List",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-timeoff",
+      "type": "http",
+      "documentation": "List Time Off",
+      "method": "get",
+      "endpoint": "time-off/",
+      "responses": [
+        {
+          "uuid": "resp-timeoff",
+          "body": "[]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Time Off List",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-codes",
+      "type": "http",
+      "documentation": "List Join Codes",
+      "method": "get",
+      "endpoint": "join-codes/",
+      "responses": [
+        {
+          "uuid": "resp-codes",
+          "body": "[]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Join Codes List",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-compat",
+      "type": "http",
+      "documentation": "List Compatibility Groups",
+      "method": "get",
+      "endpoint": "compatibility-groups/",
+      "responses": [
+        {
+          "uuid": "resp-compat",
+          "body": "[]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Compatibility Groups",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    }
+  ],
+  "rootChildren": [
+    { "type": "route", "uuid": "route-login" },
+    { "type": "route", "uuid": "route-me" },
+    { "type": "route", "uuid": "route-refresh" },
+    { "type": "route", "uuid": "route-logout" },
+    { "type": "route", "uuid": "route-departments" },
+    { "type": "route", "uuid": "route-employees" },
+    { "type": "route", "uuid": "route-shifts" },
+    { "type": "route", "uuid": "route-shifts-pub" },
+    { "type": "route", "uuid": "route-notifications" },
+    { "type": "route", "uuid": "route-projects" },
+    { "type": "route", "uuid": "route-timeoff" },
+    { "type": "route", "uuid": "route-codes" },
+    { "type": "route", "uuid": "route-compat" }
+  ],
+  "cors": true,
+  "headers": [
+    { "key": "Access-Control-Allow-Origin", "value": "*" },
+    { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS" },
+    { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Origin, Accept, Authorization, Content-Length, X-Requested-With" }
+  ]
+}
