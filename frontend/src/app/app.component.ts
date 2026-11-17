@@ -1,5 +1,5 @@
 import { Component, inject } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from './core/auth.service';
 import { Role } from './core/models';
 
@@ -23,6 +23,7 @@ export interface NotificationMessage {
 })
 export class AppComponent {
   private auth = inject(AuthService);
+  private router = inject(Router);
   title = 'ShiftWise';
 
   get isAuthenticated(): boolean {
@@ -50,11 +51,9 @@ export class AppComponent {
   }
 
   notifications: NotificationMessage[] = [];
+  isMenuOpen = false;
   isProfileMenuOpen = false;
-
-  toggleProfileMenu(): void {
-    this.isProfileMenuOpen = !this.isProfileMenuOpen;
-  }
+  
 
 
   toggleMenu(): void {
@@ -65,11 +64,26 @@ export class AppComponent {
     this.isMenuOpen = false;
   }
 
+  toggleProfileMenu(): void {
+    this.isProfileMenuOpen = !this.isProfileMenuOpen;
+  }
+
+  closeProfileMenu(): void {
+    this.isProfileMenuOpen = false;
+  }
+
+  goToAccount(): void {
+    this.closeProfileMenu();
+    this.router.navigate(['/account']);
+  }
+
+  
   dismissNotification(id: string): void {
     this.notifications = this.notifications.filter(n => n.id !== id);
   }
 
-  onLogout(): void {
+  logout(): void {
     this.auth.logout();
   }
+
 }
