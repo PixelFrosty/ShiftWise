@@ -350,6 +350,32 @@ export class ApiService {
 
   // hours of operation, shifts, templates, shift requests
   setHours(open_time: string, close_time: string): Observable<{ open_time: string; close_time: string }> { return this.http.patch<{ open_time: string; close_time: string }>(`${API_URL}/company/`, { open_time, close_time }); }
+  private getDeletedShiftIds(): number[] {
+    try {
+      const data = localStorage.getItem('sw_deleted_shifts');
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private addDeletedShiftId(id: number): void {
+    try {
+      const list = this.getDeletedShiftIds();
+      if (!list.includes(id)) {
+        list.push(id);
+        localStorage.setItem('sw_deleted_shifts', JSON.stringify(list));
+      }
+    } catch {}
+  }
+
+  private removeDeletedShiftId(id: number): void {
+    try {
+      const list = this.getDeletedShiftIds().filter(x => x !== id);
+      localStorage.setItem('sw_deleted_shifts', JSON.stringify(list));
+    } catch {}
+  }
+
   private getLocalShifts(): Shift[] {
     try {
       const data = localStorage.getItem('sw_local_shifts');
@@ -378,9 +404,12 @@ export class ApiService {
     if (department !== null) { params = params.set('department', department); }
     return this.http.get<Shift[]>(`${API_URL}/shifts/`, { params }).pipe(
       map(apiList => {
-        const local = this.getLocalShifts();
+        const deletedIds = new Set(this.getDeletedShiftIds());
+        const local = this.getLocalShifts().filter(s => !deletedIds.has(s.id));
         const localMap = new Map(local.map(s => [s.id, s]));
-        const combined = apiList.map(s => localMap.get(s.id) || s);
+        const combined = apiList
+          .filter(s => !deletedIds.has(s.id))
+          .map(s => localMap.get(s.id) || s);
         for (const s of local) {
           if (!combined.some(c => c.id === s.id)) {
             if (department === null || s.department?.id === department) {
@@ -392,7 +421,8 @@ export class ApiService {
         return combined;
       }),
       catchError(() => {
-        const local = this.getLocalShifts();
+        const deletedIds = new Set(this.getDeletedShiftIds());
+        const local = this.getLocalShifts().filter(s => !deletedIds.has(s.id));
         const fallback: Shift[] = [
           {
             id: 1,
@@ -422,7 +452,7 @@ export class ApiService {
               { id: 2, employee_id: 1, name: 'Carol Williams', is_roster: false, is_minor: false, note: 'Supervisor' }
             ]
           }
-        ];
+        ].filter(s => !deletedIds.has(s.id));
         const localMap = new Map(local.map(s => [s.id, s]));
         const combined = fallback.map(s => localMap.get(s.id) || s);
         for (const s of local) {
@@ -441,8 +471,10 @@ export class ApiService {
     return this.http.post<Shift>(`${API_URL}/shifts/`, body).pipe(
       map(res => {
         const deptId = typeof body['department'] === 'number' ? body['department'] : 1;
+        const shiftId = (res && res.id && res.id !== 101) ? res.id : Date.now();
+        this.removeDeletedShiftId(shiftId);
         const shift: Shift = {
-          id: (res && res.id && res.id !== 101) ? res.id : Date.now(),
+          id: shiftId,
           department: (res && res.department && typeof res.department === 'object') ? res.department : { id: deptId, name: deptId === 1 ? 'Operations' : 'Engineering' },
           name: (body['name'] as string) || (res && res.name) || 'Shift',
           shift_date: (body['shift_date'] as string) || (res && res.shift_date) || '2026-11-09',
@@ -458,8 +490,10 @@ export class ApiService {
       }),
       catchError(() => {
         const deptId = typeof body['department'] === 'number' ? body['department'] : 1;
+        const shiftId = Date.now();
+        this.removeDeletedShiftId(shiftId);
         const shift: Shift = {
-          id: Date.now(),
+          id: shiftId,
           department: { id: deptId, name: deptId === 1 ? 'Operations' : 'Engineering' },
           name: (body['name'] as string) || 'Shift',
           shift_date: (body['shift_date'] as string) || '2026-11-09',
@@ -497,10 +531,12 @@ export class ApiService {
     );
   }
   deleteShift(id: number): Observable<void> {
+    this.addDeletedShiftId(id);
     try {
       const list = this.getLocalShifts().filter(s => s.id !== id);
       localStorage.setItem('sw_local_shifts', JSON.stringify(list));
     } catch {}
+    this.latestShifts = this.latestShifts.filter(s => s.id !== id);
     return this.http.delete<void>(`${API_URL}/shifts/${id}/`).pipe(
       catchError(() => of(void 0))
     );

@@ -498,8 +498,15 @@ export class WeeklyScheduleComponent implements OnDestroy {
     const s = this.activeShift;
     if (!s || this.busy) { return; }
     this.busy = true;
-    this.api.deleteShift(s.id).subscribe({
-      next: () => { this.busy = false; this.closePanel(); this.reload(); },
+    const shiftId = s.id;
+    this.api.deleteShift(shiftId).subscribe({
+      next: () => {
+        this.shifts.update(list => list.filter(item => item.id !== shiftId));
+        this.weekAll.update(list => list.filter(item => item.id !== shiftId));
+        this.busy = false;
+        this.closePanel();
+        this.reload();
+      },
       error: err => this.fail(err)
     });
   }

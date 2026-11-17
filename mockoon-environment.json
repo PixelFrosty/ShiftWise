@@ -389,6 +389,25 @@
       ]
     },
     {
+      "uuid": "route-delete-shift",
+      "type": "http",
+      "documentation": "Delete Shift",
+      "method": "delete",
+      "endpoint": "shifts/:id/",
+      "responses": [
+        {
+          "uuid": "resp-delete-shift",
+          "body": "{}",
+          "latency": 0,
+          "statusCode": 204,
+          "label": "Shift Deleted",
+          "headers": [
+            { "key": "Content-Type", "value": "application/json" }
+          ]
+        }
+      ]
+    },
+    {
       "uuid": "route-auto-schedule",
       "type": "http",
       "documentation": "Auto Schedule",
@@ -429,6 +448,7 @@
     { "type": "route", "uuid": "route-assign-shift" },
     { "type": "route", "uuid": "route-unassign-shift" },
     { "type": "route", "uuid": "route-create-employee" },
+    { "type": "route", "uuid": "route-delete-shift" },
     { "type": "route", "uuid": "route-auto-schedule" }
   ],
   "cors": true,
