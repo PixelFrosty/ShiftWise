@@ -84,11 +84,11 @@
           @if (currentUser) {
             <div class="flex items-center space-x-3">
               <div class="text-right hidden sm:block">
-                <div class="text-sm font-semibold text-slate-800">{{ currentUser.username }}</div>
+                <div class="text-sm font-semibold text-slate-800">{{ currentUser?.username }}</div>
                 <div class="text-xs">
-                  @if (currentUser.role === 'ceo') {
+                  @if (currentUser?.role === 'ceo') {
                     <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">CEO</span>
-                  } @else if (currentUser.role === 'manager') {
+                  } @else if (currentUser?.role === 'manager') {
                     <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Manager</span>
                   } @else {
                     <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Employee</span>

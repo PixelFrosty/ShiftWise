@@ -10,58 +10,40 @@ import { AuthService } from '../../core/auth.service';
   styleUrl: './register.component.scss'
 })
 export class RegisterComponent {
+  // UI state
   isMenuOpen: boolean = false;
 
-  // Actually set errors up //
+  // Validation flags
   hasEmailError: boolean = false;
   hasUsernameError: boolean = false;
   hasPasswordError: boolean = false;
 
-  constructor(private router: Router, private auth: AuthService) { }
+  constructor(private router: Router, private auth: AuthService) {}
 
-  get isAuthenticated(): boolean { return this.auth.isAuthenticated; }
+  /** Shortcut for the template */
+  get isAuthenticated(): boolean {
+    return this.auth.isAuthenticated;
+  }
 
+  /** Toggle the mobile menu */
   toggleMenu(): void {
     this.isMenuOpen = !this.isMenuOpen;
   }
 
+  /** Handle registration form submit */
   onSubmit(event: Event): void {
     event.preventDefault();
     this.router.navigate(['/register-step-two']);
   }
 
-  /** Logout then navigate to the login page */
+  /** Log out and optionally navigate to login */
   goToLogin(event: Event): void {
     event.preventDefault();
     this.auth.logout();
   }
 
-  /** Log out directly from the sign‑up page when user is already logged in */
+  /** Log out directly from the sign‑up page when already logged in */
   logoutNow(event: Event): void {
-    event.preventDefault();
-    this.auth.logout();
-  }
-
-  isMenuOpen: boolean = false;
-
-  // Actually set errors up //
-  hasEmailError: boolean = false;
-  hasUsernameError: boolean = false;
-  hasPasswordError: boolean = false;
-
-  constructor(private router: Router, private auth: AuthService) { }
-
-  toggleMenu(): void {
-    this.isMenuOpen = !this.isMenuOpen;
-  }
-
-  onSubmit(event: Event): void {
-    event.preventDefault();
-    this.router.navigate(['/register-step-two']);
-  }
-
-  /** Logout then navigate to the login page */
-  goToLogin(event: Event): void {
     event.preventDefault();
     this.auth.logout();
   }
