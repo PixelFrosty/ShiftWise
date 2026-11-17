@@ -1,0 +1,559 @@
+<div class="max-w-7xl mx-auto" (keydown.escape)="closePanel()">
+  <!-- Heading -->
+  <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        @if (deptName) {
+          <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold tracking-wider uppercase" data-testid="dept-label">{{ deptName }} department</span>
+        }
+        @if (!canEdit) {
+          <span class="px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium" data-testid="view-only">View only</span>
+        }
+      </div>
+      <h1 class="text-4xl font-extrabold tracking-tight text-slate-900">Weekly Schedule</h1>
+      <p class="text-sm text-slate-500 mt-1">{{ rangeLabel }}</p>
+    </div>
+
+    <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl shadow-sm p-1.5">
+      <button type="button" (click)="goToWeek(-1)" aria-label="Previous week" class="h-9 w-9 rounded-lg bg-slate-100 hover:bg-slate-200 cursor-pointer">&lsaquo;</button>
+      <a routerLink="/schedules" title="Pick another week" class="px-3 h-9 inline-flex items-center gap-2 text-sm font-semibold text-slate-800 no-underline">
+        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"/></svg>
+        {{ shortRange }}
+      </a>
+      <button type="button" (click)="goToWeek(1)" aria-label="Next week" class="h-9 w-9 rounded-lg bg-slate-100 hover:bg-slate-200 cursor-pointer">&rsaquo;</button>
+    </div>
+  </div>
+
+  <!-- Staff toolbar -->
+  <div class="flex flex-wrap items-center gap-3 mb-5">
+    @if (departments.length > 1) {
+      <label for="dept-select" class="text-sm font-semibold text-slate-700">Department</label>
+      <select id="dept-select" [(ngModel)]="deptId" (ngModelChange)="changeDepartment()" name="deptSelect" class="h-9 border border-slate-300 rounded-md px-2 bg-white text-sm" data-testid="dept-select">
+        @for (d of departments; track d.id) { <option [ngValue]="d.id">{{ d.name }}{{ isStaff && !runs(d.id) ? ' (view only)' : '' }}{{ !isStaff && d.id === homeId ? ' (home)' : '' }}</option> }
+      </select>
+    }
+    @if (canEdit) {
+      <button type="button" (click)="openAdd()" class="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer" data-testid="add-shift">+ Add shift</button>
+      <button type="button" (click)="openTemplates()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="templates">Shift templates</button>
+      <button type="button" (click)="runAuto()" [disabled]="autoBusy" class="h-9 px-4 rounded-lg border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="auto-schedule" title="Fills the open spots this week using productivity and compatibility scores">{{ autoBusy ? 'Scheduling…' : 'Auto-schedule' }}</button>
+      @if (isCeo) {
+        <button type="button" (click)="openHours()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="hours">Hours of operation</button>
+      }
+    }
+  </div>
+
+  @if (autoError) { <div class="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-sm" data-testid="auto-error">{{ autoError }}</div> }
+  @if (loadError()) { <div class="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-sm">{{ loadError() }}</div> }
+
+  <!-- Draft / posted -->
+  @if (pub(); as p) {
+    @if (isStaff) {
+      @if (!p.published) {
+        <div class="mb-5 flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50" data-testid="draft-banner">
+          <div>
+            <div class="text-sm font-bold text-amber-900">Draft - employees cannot see this week yet</div>
+            <div class="text-xs text-amber-800">{{ canEdit ? 'Build the schedule, then review and post it. Nobody is told about shifts until you post.' : 'Only managers can see this week until the department\'s manager posts it.' }}</div>
+          </div>
+          @if (canEdit) {
+            <button type="button" (click)="openPost()" class="h-10 px-4 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold cursor-pointer" data-testid="post-week">Review &amp; post schedule</button>
+          }
+        </div>
+      } @else {
+        <div class="mb-5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-semibold" data-testid="posted-badge">
+          &#10003; Posted {{ postedOn(p) }}{{ p.published_by ? ' by ' + p.published_by : '' }} - changes you make now show to employees right away
+        </div>
+      }
+    }
+  }
+  @if (notPosted) {
+    <div class="p-10 text-center bg-white rounded-2xl border border-slate-200 shadow-sm" data-testid="not-posted">
+      <div class="text-lg font-bold text-slate-900">This week's schedule has not been posted yet</div>
+      <p class="text-sm text-slate-500 mt-1">Your manager is still working on it. You will get a notification when it is posted.</p>
+    </div>
+  } @else {
+
+  <!-- Stat cards -->
+  <div class="grid gap-4 mb-5" [class]="isStaff ? 'sm:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center gap-4">
+      <span class="w-11 h-11 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-7.13a4 4 0 11-8 0 4 4 0 018 0zm6 2a3 3 0 11-6 0"/></svg>
+      </span>
+      <div><div class="text-sm text-slate-500">Scheduled slots</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-scheduled">{{ scheduledSlots() }}</div></div>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center gap-4">
+      <span class="w-11 h-11 rounded-xl border-2 border-dashed border-slate-600 text-slate-700 flex items-center justify-center text-xl">+</span>
+      <div><div class="text-sm text-slate-500">Open shifts</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-open">{{ openSlots() }}</div></div>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center gap-4">
+      <span class="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </span>
+      <div><div class="text-sm text-slate-500">Coverage hours</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-hours">{{ coverageText }}</div></div>
+    </div>
+    @if (!isStaff) {
+      <div class="bg-white rounded-2xl border border-emerald-300 shadow-sm px-5 py-4 flex items-center gap-4">
+        <span class="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </span>
+        <div><div class="text-sm text-slate-500">Your hours this week</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-my-hours">{{ myHours() }}</div></div>
+      </div>
+    }
+  </div>
+
+  <!-- Calendar -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 text-sm text-slate-600">
+      <div class="flex items-center gap-5">
+        <span class="flex items-center gap-2" data-testid="legend-mine"><span class="inline-block w-4 h-4 rounded bg-emerald-200 border-l-4 border-emerald-600"></span>Your shift</span>
+        <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded bg-slate-300"></span>Scheduled</span>
+        <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded border-2 border-dashed border-slate-500"></span>Open shift</span>
+        <span class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>Today</span>
+        <span class="flex items-center gap-2"><span class="inline-block px-1.5 rounded border border-emerald-300 bg-emerald-50 text-emerald-800 text-[11px] font-semibold">Name</span></span>
+        <span class="flex items-center gap-2" data-testid="legend-minor"><span class="inline-block px-1.5 rounded border border-yellow-400 bg-yellow-100 text-yellow-800 text-[11px] font-semibold">Name</span>Under 18</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="text-xs text-slate-400">{{ canEdit ? 'Click a shift to assign people or edit it' : isStaff ? 'Click a shift to see who is working' : 'Click a shift to see who is working or make a request' }}</span>
+        @if (!isStaff) {
+          <button type="button" (click)="showAll.set(!showAll())" class="h-8 px-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 cursor-pointer" data-testid="show-all" [attr.aria-pressed]="showAll()">{{ showAll() ? 'Show only my shifts' : 'Show all shifts' }}</button>
+        }
+        <div class="inline-flex rounded-lg border border-slate-300 overflow-hidden" role="group" aria-label="Schedule layout">
+          <button type="button" (click)="setView('grid')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'grid' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-grid" [attr.aria-pressed]="view() === 'grid'">Grid</button>
+          <button type="button" (click)="setView('list')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'list' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-list" [attr.aria-pressed]="view() === 'list'">List</button>
+        </div>
+      </div>
+    </div>
+
+    @if (view() === 'list') {
+      <div class="p-4 space-y-4" data-testid="list-view">
+        @for (d of listDays(); track d.day.iso) {
+          <section [attr.data-testid]="'list-day-' + d.day.iso">
+            <h3 class="flex items-center gap-2 text-sm font-bold mb-2" [class.text-emerald-800]="d.day.today" [class.text-slate-700]="!d.day.today">
+              {{ d.day.long }} <span class="font-normal text-slate-500">{{ d.day.num }}</span>
+              @if (d.day.today) { <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span> }
+            </h3>
+            @if (d.shifts.length === 0) {
+              <p class="text-xs text-slate-400 pl-1">No shifts</p>
+            } @else {
+              <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                @for (s of d.shifts; track s.id) {
+                  <button type="button" (click)="openShift(s)" [class]="'text-left rounded-lg px-3 py-2.5 cursor-pointer transition flex flex-col gap-1 ' + shiftLook(s)"
+                          [attr.data-testid]="'shift-' + s.id" [attr.data-mine]="iAmOn(s)" [attr.aria-label]="(s.name || 'Shift') + ' ' + timeRange(s)">
+                    <div class="flex items-center justify-between gap-2 text-sm font-semibold text-slate-900">
+                      <span>{{ timeRange(s) }}</span>
+                      @if (iAmOn(s)) { <span class="text-[11px] font-bold uppercase tracking-wide text-emerald-800">Your shift</span> }
+                    </div>
+                    <div class="text-[11px] text-slate-600">{{ s.name || 'Shift' }}{{ s.outside_hours ? ' · outside hours' : '' }}</div>
+                    <div class="flex flex-wrap gap-1">
+                      @for (a of s.assignments; track a.id) {
+                        <span [class]="nameClass(a)" [attr.data-minor]="a.is_minor" data-testid="shift-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span>
+                      }
+                    </div>
+                    @for (a of s.assignments; track a.id) {
+                      @if (isMine(a) && a.note) { <div class="text-[11px] italic text-slate-700" data-testid="my-note">Note: {{ a.note }}</div> }
+                    }
+                    @if (s.open_count > 0) {
+                      <div class="text-[11px] font-semibold text-orange-700 border border-dashed border-orange-400 rounded px-1.5 py-0.5 bg-white/70 self-start">+ {{ s.open_count }} open</div>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </section>
+        }
+        @if (!loading() && visibleShifts().length === 0) {
+          <p class="text-center text-sm text-slate-500" data-testid="no-shifts">{{ emptyText }}</p>
+        }
+      </div>
+    } @else {
+    <div class="overflow-x-auto p-4">
+      <div class="min-w-[860px]">
+        <!-- day headers -->
+        <div class="grid grid-cols-[56px_repeat(7,1fr)] gap-2 mb-2">
+          <div></div>
+          @for (day of days(); track day.iso) {
+            <div class="rounded-xl py-2 text-center" [class.bg-emerald-100]="day.today" [class.bg-slate-100]="!day.today" [attr.data-testid]="'day-' + day.iso">
+              <div class="text-xs font-semibold tracking-wider" [class.text-emerald-700]="day.today" [class.text-slate-500]="!day.today">{{ day.short }} <span class="text-base font-extrabold" [class.text-emerald-800]="day.today" [class.text-slate-900]="!day.today">{{ day.num }}</span></div>
+              @if (hasShifts(day.iso)) {
+                @if (openOnDay(day.iso) > 0) {
+                  <span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[11px] font-medium" data-testid="day-open">{{ openOnDay(day.iso) }} open shift{{ openOnDay(day.iso) === 1 ? '' : 's' }}</span>
+                } @else {
+                  <span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-white text-emerald-700 text-[11px] font-medium">&#10003; Fully staffed</span>
+                }
+              } @else {
+                <span class="inline-block mt-1 text-[11px] text-slate-400">No shifts</span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- grid -->
+        <div class="grid grid-cols-[56px_repeat(7,1fr)] gap-2">
+          <div class="relative" [style.height.px]="gridHeight">
+            @for (label of hourLabels; track $index) {
+              <div class="absolute right-2 text-[11px] font-medium text-slate-500 -translate-y-1/2" [style.top.px]="$index * hourPx">{{ label }}</div>
+            }
+          </div>
+          @for (day of days(); track day.iso) {
+            <div class="relative rounded-lg border border-slate-100" [class.bg-emerald-50]="day.today" [class.bg-slate-50]="!day.today" [style.height.px]="gridHeight"
+                 [style.background-image]="'linear-gradient(to bottom, rgba(148,163,184,.25) 1px, transparent 1px)'" [style.background-size]="'100% ' + hourPx + 'px'">
+              @for (p of placed()[day.iso]; track p.shift.id) {
+                <div class="absolute p-0.5" [style.top.px]="p.top" [style.height.px]="p.height" [style.left.%]="p.left" [style.width.%]="p.width">
+                  <button type="button" (click)="openShift(p.shift)" [class]="blockClass(p.shift)"
+                          [attr.data-testid]="'shift-' + p.shift.id" [attr.aria-label]="(p.shift.name || 'Shift') + ' ' + timeRange(p.shift)">
+                    @if (p.shift.assignments.length === 0) {
+                      <div class="flex items-center justify-between text-sm font-semibold text-slate-900"><span>Open shift</span><span class="text-lg font-normal">+</span></div>
+                      <div class="text-[11px] text-slate-500">{{ timeRange(p.shift) }}{{ p.shift.headcount > 1 ? ' · needs ' + p.shift.headcount : '' }}{{ p.shift.outside_hours ? ' · outside hours' : '' }}</div>
+                    } @else {
+                      <div class="text-[11px] text-slate-600 leading-tight">{{ p.shift.name ? p.shift.name + ' · ' : '' }}{{ timeRange(p.shift) }}{{ p.shift.outside_hours ? ' · outside hours' : '' }}</div>
+                      @for (a of p.shift.assignments; track a.id) {
+                        <div><span [class]="nameClass(a)" [attr.data-minor]="a.is_minor" data-testid="shift-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span></div>
+                        @if (isMine(a) && a.note) { <div class="text-[11px] italic text-slate-600 truncate" data-testid="my-note">Note: {{ a.note }}</div> }
+                      }
+                      @if (p.shift.open_count > 0) {
+                        <div class="mt-auto text-[11px] font-semibold text-orange-700 border border-dashed border-orange-400 rounded px-1.5 py-0.5 bg-white/70">+ {{ p.shift.open_count }} open</div>
+                      }
+                    }
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+        @if (!loading() && visibleShifts().length === 0) {
+          <p class="text-center text-sm text-slate-500 mt-4" data-testid="no-shifts">{{ emptyText }}</p>
+        }
+      </div>
+    </div>
+    }
+  </div>
+
+  }
+
+  <!-- Shift panel -->
+  @if (panel === 'shift' && activeShift; as s) {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <div class="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6" (click)="$event.stopPropagation()" role="dialog" aria-label="Shift details" data-testid="shift-panel">
+        <div class="flex items-start justify-between gap-3 mb-1">
+          <div>
+            <div class="text-xs text-slate-500">{{ dayName(s.shift_date) }} {{ s.shift_date }}</div>
+            <h2 class="text-lg font-bold text-slate-900">{{ s.name || 'Shift' }} · {{ timeRange(s) }}</h2>
+            <div class="text-sm text-slate-500" data-testid="fill-count">{{ s.assignments.length }} of {{ s.headcount }} filled</div>
+          </div>
+          <button type="button" (click)="closePanel()" class="text-2xl leading-none text-slate-400 hover:text-slate-700 cursor-pointer" aria-label="Close">&times;</button>
+        </div>
+
+        @if (panelError) { <div class="my-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+        @if (requestDone) { <div class="my-3 p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-sm" data-testid="request-done">{{ requestDone }}</div> }
+
+        <ul class="my-4 space-y-2" data-testid="shift-people">
+          @for (a of s.assignments; track a.id) {
+            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
+              <span class="text-sm"><span [class]="nameClass(a)" [attr.data-minor]="a.is_minor" data-testid="panel-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span>@if (a.is_minor) { <span class="ml-1 text-[11px] text-yellow-700">under 18 · limits apply</span> }<span class="text-slate-500">{{ a.is_roster ? ' · no login' : '' }}</span></span>
+              <span class="flex gap-2 text-xs">
+                @if (canEdit) {
+                  <button type="button" (click)="startNote(a)" class="text-blue-700 hover:underline cursor-pointer" [attr.data-testid]="'note-btn-' + a.id">{{ a.note ? 'Edit note' : 'Add note' }}</button>
+                  <button type="button" (click)="removePerson(a)" class="text-rose-600 hover:underline cursor-pointer" [attr.aria-label]="'Remove ' + a.name">Remove</button>
+                } @else if (!isStaff && !isPast(s) && !a.is_roster) {
+                  @if (isMine(a)) {
+                    <button type="button" (click)="startRequest('give')" class="text-emerald-700 hover:underline cursor-pointer" data-testid="give-away">Give away</button>
+                  } @else {
+                    <button type="button" (click)="startRequest('take', a)" class="text-emerald-700 hover:underline cursor-pointer" [attr.data-testid]="'take-' + a.id">Take shift</button>
+                    <button type="button" (click)="startRequest('swap', a)" class="text-blue-700 hover:underline cursor-pointer" [attr.data-testid]="'swap-' + a.id">Swap</button>
+                  }
+                }
+              </span>
+              @if (canEdit && noteEditId === a.id) {
+                <div class="w-full space-y-1.5" data-testid="note-editor">
+                  <textarea [(ngModel)]="noteDraft" name="noteDraft" rows="2" maxlength="500" placeholder="What should {{ a.name }} do on this shift?" class="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm bg-white" data-testid="note-input"></textarea>
+                  <div class="flex gap-2">
+                    <button type="button" (click)="saveNote(a)" [disabled]="busy" class="px-3 h-8 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-50" data-testid="note-save">Save note</button>
+                    <button type="button" (click)="noteEditId = null" class="px-3 h-8 rounded-md border border-slate-300 text-xs cursor-pointer">Cancel</button>
+                  </div>
+                </div>
+              } @else if (a.note) {
+                <div class="w-full text-xs text-slate-700 bg-white border border-slate-200 rounded px-2 py-1 whitespace-pre-line" data-testid="person-note"><span class="font-semibold">Note:</span> {{ a.note }}</div>
+              }
+            </li>
+          } @empty {
+            <li class="text-sm text-slate-500">Nobody is assigned yet.</li>
+          }
+        </ul>
+
+        <!-- employee request forms -->
+        @if (requestMode; as mode) {
+          <div class="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-3" data-testid="request-form">
+            @if (mode.kind === 'give') {
+              <div class="text-sm font-semibold text-slate-800">Give up this shift</div>
+              <select [(ngModel)]="giveTo" name="giveTo" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="give-to">
+                <option [ngValue]="'all'">Everyone in my department (first to accept gets it)</option>
+                @for (c of coworkers(); track c.id) { <option [ngValue]="c.id">{{ c.name }}</option> }
+              </select>
+            } @else if (mode.kind === 'take') {
+              <div class="text-sm text-slate-800">Ask <strong>{{ mode.person?.name }}</strong> to give you this shift?</div>
+            } @else {
+              <div class="text-sm font-semibold text-slate-800">Swap with {{ mode.person?.name }}</div>
+              @if (mySwappable.length) {
+                <label class="block text-xs text-slate-600">I'll give up</label>
+                <select [(ngModel)]="swapMine" name="swapMine" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="swap-mine">
+                  @for (m of mySwappable; track m.id) { <option [ngValue]="m.id">{{ m.label }}</option> }
+                </select>
+              } @else {
+                <div class="text-sm text-slate-500">You have no upcoming shifts this week to offer.</div>
+              }
+            }
+            <div class="flex gap-2">
+              <button type="button" (click)="sendRequest()" [disabled]="busy" class="px-3 h-9 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="send-request">Send request</button>
+              <button type="button" (click)="requestMode = null" class="px-3 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+            </div>
+          </div>
+        }
+
+        <!-- staff controls -->
+        @if (canEdit) {
+          @if (s.open_count > 0) {
+ <div class="flex flex-wrap gap-2 mb-4">
+              <select [(ngModel)]="toAdd" name="toAdd" class="flex-1 h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="add-person">
+                <option [ngValue]="null">Add an employee…</option>
+                @for (p of addable; track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+              </select>
+              <button type="button" (click)="addPerson()" [disabled]="!toAdd || busy" class="h-9 px-3 rounded-md text-sm bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer" data-testid="add-person-btn">Add</button>
+              <input type="text" [(ngModel)]="newNote" name="newNote" maxlength="500" placeholder="Note for this person (optional) - what should they do?" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="add-note" />
+            </div>
+          } @else {
+            <p class="text-xs text-slate-500 mb-4">This shift is full. Raise the number of people needed to add more.</p>
+          }
+
+          @if (editing) {
+            <div class="mb-4 p-3 rounded-lg border border-slate-200 space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <div class="col-span-2"><label class="block text-xs text-slate-600 mb-0.5">Name</label><input type="text" [(ngModel)]="edit.name" name="editName" maxlength="100" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" /></div>
+                <div><label class="block text-xs text-slate-600 mb-0.5">Start</label><input type="time" [(ngModel)]="edit.start_time" name="editStart" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="edit-start" /></div>
+                <div><label class="block text-xs text-slate-600 mb-0.5">End</label><input type="time" [(ngModel)]="edit.end_time" name="editEnd" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="edit-end" /></div>
+                <div><label class="block text-xs text-slate-600 mb-0.5">People needed</label><input type="number" min="1" max="100" [(ngModel)]="edit.headcount" name="editHeadcount" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="edit-headcount" /></div>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" (click)="saveEdit()" [disabled]="busy" class="px-3 h-9 rounded-md bg-emerald-600 text-white text-sm font-semibold cursor-pointer" data-testid="edit-save">Save</button>
+                <button type="button" (click)="editing = false" class="px-3 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+              </div>
+            </div>
+          } @else {
+            <div class="flex justify-between text-sm">
+              <button type="button" (click)="startEdit()" class="text-slate-700 hover:underline cursor-pointer" data-testid="edit-shift">Edit shift / people needed</button>
+              <button type="button" (click)="deleteShift()" class="text-rose-600 hover:underline cursor-pointer" data-testid="delete-shift">Delete shift</button>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Warning before scheduling (approved time off, hour limits, minors) -->
+  @if (outsidePrompt; as o) {
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center" role="alertdialog" aria-label="Outside hours of operation" data-testid="outside-warning">
+        <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 text-xl font-bold">!</div>
+        <p class="text-slate-800 mb-5" data-testid="outside-text">{{ o.text }}</p>
+        <div class="flex justify-center gap-3">
+          <button type="button" (click)="confirmOutside(false)" class="px-5 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="outside-no">No</button>
+          <button type="button" (click)="confirmOutside(true)" class="px-5 h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer" data-testid="outside-yes">Yes</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (confirmPrompt; as t) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center" role="alertdialog" [attr.aria-label]="t.kind === 'time_off' ? 'Approved time off' : 'Scheduling warning'" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-warning' : 'limit-warning'">
+        <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 text-xl font-bold">!</div>
+        <p class="text-slate-800 mb-5" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-text' : 'limit-text'">{{ t.text }}</p>
+        <div class="flex justify-center gap-3">
+          <button type="button" (click)="confirmWarning(false)" class="px-5 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-no' : 'limit-no'">No</button>
+          <button type="button" (click)="confirmWarning(true)" class="px-5 h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-yes' : 'limit-yes'">Yes</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Auto-schedule: unanswered time-off requests -->
+  @if (autoPrompt; as p) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center" role="alertdialog" aria-label="Unanswered request offs" data-testid="auto-pending">
+        <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 text-xl font-bold">!</div>
+        <p class="text-slate-800 mb-2">There are still request offs that have not been looked at. Would you like to continue?</p>
+        <p class="text-xs text-slate-500 mb-5">{{ p.count }} pending{{ p.people.length ? ' (' + p.people.join(', ') + ')' : '' }}. Pending requests are not blocked off by the auto scheduler; only approved ones are.</p>
+        <div class="flex flex-wrap justify-center gap-3">
+          <a routerLink="/time-off" class="px-4 h-10 inline-flex items-center rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold no-underline text-slate-800" data-testid="auto-review">Review requests</a>
+          <button type="button" (click)="autoPrompt = null" class="px-4 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="auto-cancel">Cancel</button>
+          <button type="button" (click)="runAuto(true)" class="px-5 h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer" data-testid="auto-continue">Continue</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Auto-schedule result -->
+  @if (autoResult; as r) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" (click)="autoResult = null">
+      <div class="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-3" (click)="$event.stopPropagation()" role="dialog" aria-label="Auto-schedule result" data-testid="auto-result">
+        <h2 class="text-lg font-bold text-slate-900">Auto-schedule finished</h2>
+        <p class="text-sm text-slate-700" data-testid="auto-summary">Filled {{ r.created }} of {{ r.open_before }} open spot{{ r.open_before === 1 ? '' : 's' }}.{{ r.open_after ? ' ' + r.open_after + ' still open.' : '' }}</p>
+        @if (r.notes.length) {
+          <ul class="list-disc pl-5 text-sm text-slate-600 space-y-1" data-testid="auto-notes">
+            @for (n of r.notes; track $index) { <li>{{ n }}</li> }
+          </ul>
+        }
+        <div class="flex justify-end"><button type="button" (click)="autoResult = null" class="px-4 h-9 rounded-lg bg-emerald-600 text-white text-sm font-semibold cursor-pointer" data-testid="auto-close">Done</button></div>
+      </div>
+    </div>
+  }
+
+  <!-- Post: step 1, review -->
+  @if (postReview; as r) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4" role="dialog" aria-label="Review schedule" data-testid="post-review">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Review before posting</h2>
+          <p class="text-xs text-slate-500">{{ r.department.name }} · {{ r.week_label }}</p>
+        </div>
+        @if (postError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="post-error">{{ postError }}</div> }
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="rounded-lg bg-slate-50 border border-slate-200 py-2"><div class="text-xl font-extrabold text-slate-900" data-testid="review-shifts">{{ r.shift_count }}</div><div class="text-[11px] text-slate-500">shifts</div></div>
+          <div class="rounded-lg bg-slate-50 border border-slate-200 py-2"><div class="text-xl font-extrabold text-slate-900" data-testid="review-filled">{{ r.filled }} / {{ r.slots }}</div><div class="text-[11px] text-slate-500">spots filled</div></div>
+          <div class="rounded-lg border py-2" [class]="r.open_slots ? 'bg-orange-50 border-orange-300' : 'bg-emerald-50 border-emerald-300'"><div class="text-xl font-extrabold text-slate-900" data-testid="review-open">{{ r.open_slots }}</div><div class="text-[11px] text-slate-500">still open</div></div>
+        </div>
+        @if (r.warnings.length) {
+          <div class="rounded-lg border border-amber-300 bg-amber-50 p-3" data-testid="review-warnings">
+            <div class="text-sm font-semibold text-amber-900 mb-1">Check these first</div>
+            <ul class="list-disc pl-5 text-xs text-amber-900 space-y-0.5">@for (w of r.warnings; track $index) { <li>{{ w }}</li> }</ul>
+          </div>
+        }
+        @if (r.open_shifts.length) {
+          <div class="rounded-lg border border-orange-300 bg-orange-50 p-3" data-testid="review-open-list">
+            <div class="text-sm font-semibold text-orange-900 mb-1">Shifts with open spots</div>
+            <ul class="list-disc pl-5 text-xs text-orange-900 space-y-0.5">@for (o of r.open_shifts; track $index) { <li>{{ o }}</li> }</ul>
+          </div>
+        }
+        @if (r.people.length) {
+          <div>
+            <div class="text-sm font-semibold text-slate-800 mb-1">{{ r.people.length }} {{ r.people.length === 1 ? 'person is' : 'people are' }} scheduled</div>
+            <ul class="text-xs text-slate-700 divide-y divide-slate-100 border border-slate-200 rounded-lg">
+              @for (pp of r.people; track pp.name) { <li class="flex justify-between px-3 py-1.5"><span>{{ pp.name }}</span><span>{{ pp.shifts }} shift{{ pp.shifts === 1 ? '' : 's' }} · {{ pp.hours }} h</span></li> }
+            </ul>
+          </div>
+        }
+        @if (r.shift_count === 0) { <p class="text-sm text-rose-700" data-testid="review-empty">There are no shifts in this week, so there is nothing to post.</p> }
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" (click)="cancelPost()" class="px-4 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="post-back">Back to editing</button>
+          <button type="button" (click)="postConfirm = true" [disabled]="r.shift_count === 0" class="px-4 h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="post-continue">Continue</button>
+        </div>
+      </div>
+    </div>
+    <!-- Post: step 2, are you sure -->
+    @if (postConfirm) {
+      <div class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
+        <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4" role="alertdialog" aria-label="Confirm posting" data-testid="post-confirm">
+          <h2 class="text-lg font-bold text-slate-900">Post this schedule?</h2>
+          <p class="text-sm text-slate-700">Everyone in {{ r.department.name }} will be able to see the schedule for {{ r.week_label }}, and the {{ r.people.length }} {{ r.people.length === 1 ? 'person' : 'people' }} on it will be notified.
+            @if (r.open_slots) { <strong> {{ r.open_slots }} spot{{ r.open_slots === 1 ? ' is' : 's are' }} still open.</strong> }
+            @if (r.warnings.length) { <strong> {{ r.warnings.length }} warning{{ r.warnings.length === 1 ? ' was' : 's were' }} shown.</strong> }
+            Later changes will show right away. Are you sure?</p>
+          <div class="flex justify-end gap-2">
+            <button type="button" (click)="postConfirm = false" class="px-4 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="post-no">No, go back</button>
+            <button type="button" (click)="confirmPost()" [disabled]="postBusy" class="px-4 h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="post-yes">Yes, post it</button>
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- Add shift -->
+  @if (panel === 'add') {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <form class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-3" (click)="$event.stopPropagation()" (ngSubmit)="createShift()" data-testid="add-panel">
+        <h2 class="text-lg font-bold text-slate-900">Add a shift</h2>
+        <p class="text-xs text-slate-500">{{ deptName }} · hours of operation {{ coverageText }}</p>
+        @if (panelError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+        <div><label class="block text-xs text-slate-600 mb-0.5">Name (optional)</label><input type="text" [(ngModel)]="newShift.name" name="nsName" maxlength="100" placeholder="e.g. Morning" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-name" /></div>
+        <div><label class="block text-xs text-slate-600 mb-0.5">Day</label>
+          <select [(ngModel)]="newShift.shift_date" name="nsDate" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="ns-date">
+            @for (d of days(); track d.iso) { <option [value]="d.iso">{{ d.long }} {{ d.num }}</option> }
+          </select></div>
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="block text-xs text-slate-600 mb-0.5">Start</label><input type="time" [(ngModel)]="newShift.start_time" name="nsStart" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-start" /></div>
+          <div><label class="block text-xs text-slate-600 mb-0.5">End</label><input type="time" [(ngModel)]="newShift.end_time" name="nsEnd" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-end" /></div>
+          <div><label class="block text-xs text-slate-600 mb-0.5">People needed</label><input type="number" min="1" max="100" [(ngModel)]="newShift.headcount" name="nsHeadcount" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-headcount" /></div>
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" (click)="closePanel()" class="px-4 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+          <button type="submit" [disabled]="busy" class="px-4 h-9 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="ns-save">Add shift</button>
+        </div>
+      </form>
+    </div>
+  }
+
+  <!-- Templates -->
+  @if (panel === 'templates') {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4" (click)="$event.stopPropagation()" data-testid="templates-panel">
+        <div class="flex items-start justify-between"><div><h2 class="text-lg font-bold text-slate-900">Shift templates</h2>
+          <p class="text-xs text-slate-500">Save a shift and how many people it needs, then apply it to days of this week for {{ deptName }}.</p></div>
+          <button type="button" (click)="closePanel()" class="text-2xl leading-none text-slate-400 hover:text-slate-700 cursor-pointer" aria-label="Close">&times;</button></div>
+        @if (panelError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+        @if (templateMessage) { <div class="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-sm" data-testid="template-message">{{ templateMessage }}</div> }
+
+        <div class="rounded-lg border border-slate-200 p-3 space-y-2">
+          <div class="text-sm font-semibold text-slate-800">New template</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div class="col-span-2 sm:col-span-1"><label class="block text-xs text-slate-600 mb-0.5">Name</label><input type="text" [(ngModel)]="newTemplate.name" name="ntName" maxlength="100" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-name" /></div>
+            <div><label class="block text-xs text-slate-600 mb-0.5">Start</label><input type="time" [(ngModel)]="newTemplate.start_time" name="ntStart" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-start" /></div>
+            <div><label class="block text-xs text-slate-600 mb-0.5">End</label><input type="time" [(ngModel)]="newTemplate.end_time" name="ntEnd" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-end" /></div>
+            <div><label class="block text-xs text-slate-600 mb-0.5">People</label><input type="number" min="1" max="100" [(ngModel)]="newTemplate.headcount" name="ntCount" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-count" /></div>
+          </div>
+          <button type="button" (click)="saveTemplate()" [disabled]="busy" class="px-3 h-9 rounded-md bg-emerald-600 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="nt-save">Save template</button>
+        </div>
+
+        <ul class="space-y-1.5" data-testid="template-list">
+          @for (t of templates(); track t.id) {
+            <li class="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-sm" data-testid="template-row">
+              <span><strong>{{ t.name }}</strong> · {{ timeRange(t) }} · needs {{ t.headcount }}</span>
+              <button type="button" (click)="removeTemplate(t)" class="text-xs text-rose-600 hover:underline cursor-pointer">Delete</button>
+            </li>
+          } @empty { <li class="text-sm text-slate-500">No templates yet.</li> }
+        </ul>
+
+        @if (templates().length) {
+          <div class="rounded-lg border border-slate-200 p-3 space-y-2">
+            <div class="text-sm font-semibold text-slate-800">Apply to {{ rangeLabel }}</div>
+            <select [(ngModel)]="applyTemplateId" name="applyTemplate" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="apply-template">
+              @for (t of templates(); track t.id) { <option [ngValue]="t.id">{{ t.name }} ({{ timeRange(t) }}, {{ t.headcount }})</option> }
+            </select>
+            <div class="flex flex-wrap gap-3">
+              @for (d of days(); track d.iso; let i = $index) {
+                <label class="flex items-center gap-1 text-sm"><input type="checkbox" [(ngModel)]="applyDays[i]" [name]="'applyDay' + i" [attr.data-day]="d.short" /> {{ d.short }}</label>
+              }
+            </div>
+            <button type="button" (click)="applyTemplate()" [disabled]="busy" class="px-3 h-9 rounded-md border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="apply-btn">Apply to selected days</button>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Hours of operation (General Manager) -->
+  @if (panel === 'hours') {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <form class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-3" (click)="$event.stopPropagation()" (ngSubmit)="saveHours()" data-testid="hours-panel">
+        <h2 class="text-lg font-bold text-slate-900">Hours of operation</h2>
+        <p class="text-xs text-slate-500">The same opening and closing time applies every day. Shifts must fall inside these hours.</p>
+        @if (panelError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-xs text-slate-600 mb-0.5">Opens</label><input type="time" [(ngModel)]="hoursForm.open_time" name="hOpen" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="h-open" /></div>
+          <div><label class="block text-xs text-slate-600 mb-0.5">Closes</label><input type="time" [(ngModel)]="hoursForm.close_time" name="hClose" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="h-close" /></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" (click)="closePanel()" class="px-4 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+          <button type="submit" [disabled]="busy" class="px-4 h-9 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="h-save">Save</button>
+        </div>
+      </form>
+    </div>
+  }
+</div>
