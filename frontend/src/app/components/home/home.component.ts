@@ -12,6 +12,13 @@ interface HomeConfig {
   banner: { title: string; text: string; secondary?: { label: string; link: string }; primary: { label: string; link: string } };
 }
 
+const IMG = {
+  calendar: '/icon_calendar.png',
+  timeOff: '/icon_tomeoff.png',
+  employee: '/icon_employee.png',
+  code: '/icon_code.png'
+};
+
 // Simple outline icons (24x24 paths)
 const ICON = {
   calendar: 'M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z',
