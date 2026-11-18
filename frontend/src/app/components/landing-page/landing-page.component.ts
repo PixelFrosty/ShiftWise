@@ -25,6 +25,9 @@ export class LandingPageComponent {
   isMenuOpen: boolean = false;
   justRegistered = false;
 
+  showPassword = false;
+
+
   constructor() {
     const state = this.router.getCurrentNavigation()?.extras.state;
     if (state?.['registered']) {
@@ -36,6 +39,9 @@ export class LandingPageComponent {
     if (this.auth.isAuthenticated) {
       this.router.navigate(['/home']);
     }
+  }
+togglePassword(): void {
+  this.showPassword = !this.showPassword;
   }
 
   toggleMenu(): void {

@@ -12,17 +12,29 @@ import { AuthService } from '../../core/auth.service';
 export class RegisterComponent {
   // UI state
   isMenuOpen: boolean = false;
+  showPassword = false;
+  showConfirmPassword = false;
 
   // Validation flags
   hasEmailError: boolean = false;
   hasUsernameError: boolean = false;
   hasPasswordError: boolean = false;
 
+
+
   constructor(private router: Router, private auth: AuthService) {}
 
   /** Shortcut for the template */
   get isAuthenticated(): boolean {
     return this.auth.isAuthenticated;
+  }
+
+  togglePassword(): void {
+    this.showPassword = !this.showPassword;
+  }
+
+  toggleConfirmPassword(): void {
+    this.showConfirmPassword = !this.showConfirmPassword;
   }
 
   /** Toggle the mobile menu */
