@@ -7,12 +7,15 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          50: '#f0fdf4',
-          100: '#dcfce7',
-          500: '#22c55e',
-          600: '#16a34a',
-          700: '#15803d',
-          900: '#14532d',
+          50:  '#F5ECD1',   // Cream (light backgrounds)
+          100: '#F5ECD1',   // Cream
+          200: '#d4dcff',   // Light blue tint
+          300: '#b3c0ff',   // Medium-light blue
+          500: '#8AA4FF',   // Blue Regatta (primary)
+          600: '#8AA4FF',   // Blue Regatta (buttons)
+          700: '#6B88E8',   // Darker blue (hover)
+          800: '#292521',   // Charcoal
+          900: '#292521',   // Charcoal
         }
       }
     },

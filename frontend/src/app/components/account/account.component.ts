@@ -23,7 +23,7 @@ import { errorText, roleLabel } from '../../core/models';
                 <div>{{ managed() }}</div></div>
             }
           } @else {
-            <p class="text-sm text-slate-600">You are not in a company. <a href="/join-company" class="text-emerald-700 underline" (click)="goJoin($event)">Join one with a code</a>.</p>
+            <p class="text-sm text-slate-600">You are not in a company. <a href="/join-company" class="text-brand-700 underline" (click)="goJoin($event)">Join one with a code</a>.</p>
           }
         </div>
 

@@ -23,9 +23,9 @@ import { errorText } from '../../core/models';
           <div>
             <label for="code" class="block text-sm font-bold text-slate-700 mb-1.5">Join Code</label>
             <input id="code" name="code" type="text" autocomplete="off" placeholder="XXXX-XXXX" maxlength="20" [(ngModel)]="code" (ngModelChange)="error = ''"
-                   class="w-full h-10 bg-slate-50 border border-slate-300 rounded-md px-3 text-sm uppercase tracking-widest outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20" />
+                   class="w-full h-10 bg-slate-50 border border-slate-300 rounded-md px-3 text-sm uppercase tracking-widest outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-500/20" />
           </div>
-          <button type="submit" [disabled]="busy" class="w-full h-11 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-semibold rounded-md shadow-sm transition cursor-pointer">
+          <button type="submit" [disabled]="busy" class="w-full h-11 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-semibold rounded-md shadow-sm transition cursor-pointer">
             {{ busy ? 'Joining…' : 'Join company' }}
           </button>
         </form>

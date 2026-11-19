@@ -26,7 +26,7 @@ import { errorText } from '../../core/models';
             <input id="reason" name="reason" type="text" maxlength="255" [(ngModel)]="reason" class="w-full h-10 border border-slate-300 rounded-md px-3 text-sm" /></div>
         </div>
         @if (error()) { <div class="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="to-error">{{ error() }}</div> }
-        <button type="submit" class="mt-3 h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="submit-to">Submit request</button>
+        <button type="submit" class="mt-3 h-10 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="submit-to">Submit request</button>
       </form>
 
       @if (isStaff()) {
@@ -40,7 +40,7 @@ import { errorText } from '../../core/models';
               </div>
               <span [class]="badge(r.status)">{{ r.status === 'denied' ? 'rejected' : r.status }}</span>
               @if (r.status === 'pending') {
-                <button type="button" (click)="decide(r, 'approved')" class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer" data-testid="approve">Approve</button>
+                <button type="button" (click)="decide(r, 'approved')" class="px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold cursor-pointer" data-testid="approve">Approve</button>
                 <button type="button" (click)="decide(r, 'denied')" class="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50 text-xs font-semibold cursor-pointer" data-testid="reject">Reject</button>
               }
             </div>
@@ -89,7 +89,7 @@ export class TimeOffComponent {
 
   badge(status: string): string {
     const base = 'px-2 py-0.5 rounded-full text-xs font-semibold capitalize ';
-    return base + (status === 'approved' ? 'bg-emerald-100 text-emerald-800' : status === 'denied' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800');
+    return base + (status === 'approved' ? 'bg-brand-100 text-brand-800' : status === 'denied' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800');
   }
 
   submit(): void {

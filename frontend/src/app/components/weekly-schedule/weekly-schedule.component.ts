@@ -273,10 +273,10 @@ export class WeeklyScheduleComponent implements OnDestroy {
     return base + this.shiftLook(s);
   }
 
-  /** Colours shared by grid blocks and list cards. The viewer's own shifts are bright green so they stand out. */
+  /** Colours shared by grid blocks and list cards. The viewer's own shifts are bright blue so they stand out. */
   shiftLook(s: Shift): string {
     const look = this.iAmOn(s)
-      ? 'bg-emerald-200 hover:bg-emerald-300 border-l-4 border-emerald-600 ring-2 ring-emerald-600 '
+      ? 'bg-brand-200 hover:bg-brand-300 border-l-4 border-brand-600 ring-2 ring-brand-600 '
       : s.assignments.length
         ? 'bg-slate-300 hover:bg-slate-400 border-l-4 border-slate-500 '
         : 'bg-white hover:bg-slate-50 border-2 border-dashed border-slate-700 ';
@@ -451,8 +451,8 @@ export class WeeklyScheduleComponent implements OnDestroy {
 
   nameClass(p: ShiftPerson): string {
     const base = 'inline-flex items-center max-w-full truncate rounded-md border px-1.5 py-0.5 text-xs leading-tight ';
-    const look = this.isMine(p) ? 'bg-emerald-600 border-emerald-700 text-white'
-      : p.is_minor ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'bg-emerald-50 border-emerald-300 text-emerald-800';
+    const look = this.isMine(p) ? 'bg-brand-600 border-brand-700 text-white'
+      : p.is_minor ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'bg-brand-50 border-brand-300 text-brand-800';
     return base + look + (this.isMine(p) ? ' font-bold' : ' font-semibold');
   }
 

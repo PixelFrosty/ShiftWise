@@ -44,14 +44,14 @@ import { errorText } from '../../core/models';
               </div>
             </fieldset>
           }
-          <button type="button" (click)="create()" class="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="make-code">Create code</button>
+          <button type="button" (click)="create()" class="h-10 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="make-code">Create code</button>
         </div>
         @if (error()) { <div class="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm">{{ error() }}</div> }
         @if (fresh(); as f) {
-          <div class="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-md flex items-center gap-3">
-            <span class="text-sm text-emerald-900">New {{ f.role }} code:</span>
-            <code class="text-lg font-bold tracking-widest text-emerald-900" data-testid="new-code">{{ f.code }}</code>
-            <button type="button" (click)="copy(f.code)" class="text-xs px-2 py-1 rounded border border-emerald-300 hover:bg-emerald-100 cursor-pointer">{{ copied() ? 'Copied' : 'Copy' }}</button>
+          <div class="mt-3 p-3 bg-brand-50 border border-brand-200 rounded-md flex items-center gap-3">
+            <span class="text-sm text-brand-900">New {{ f.role }} code:</span>
+            <code class="text-lg font-bold tracking-widest text-brand-900" data-testid="new-code">{{ f.code }}</code>
+            <button type="button" (click)="copy(f.code)" class="text-xs px-2 py-1 rounded border border-brand-300 hover:bg-brand-100 cursor-pointer">{{ copied() ? 'Copied' : 'Copy' }}</button>
           </div>
         }
       </div>
@@ -69,7 +69,7 @@ import { errorText } from '../../core/models';
                 <td class="px-4 py-2">{{ names(c) }}</td>
                 <td class="px-4 py-2">
                   @if (c.status === 'used') { <span class="text-slate-500">Used by {{ c.used_by }}</span> }
-                  @else { <span class="text-emerald-700 font-medium">Unused</span> }
+                  @else { <span class="text-brand-700 font-medium">Unused</span> }
                 </td>
                 <td class="px-4 py-2 text-right whitespace-nowrap">
                   @if (c.status === 'unused') {

@@ -149,7 +149,7 @@ export class EmployeeDirectoryComponent implements OnInit {
 
   getProductivityBarColor(score: number | null): string {
     if (score === null) return 'bg-slate-300';
-    if (score >= 8) return 'bg-emerald-600';
+    if (score >= 8) return 'bg-brand-600';
     if (score >= 5) return 'bg-amber-500';
     return 'bg-rose-500';
   }
@@ -158,7 +158,7 @@ export class EmployeeDirectoryComponent implements OnInit {
     switch (role) {
       case 'ceo':      return 'bg-purple-100 text-purple-800';
       case 'manager':  return 'bg-blue-100 text-blue-800';
-      default:         return 'bg-emerald-100 text-emerald-800';
+      default:         return 'bg-brand-100 text-brand-800';
     }
   }
 

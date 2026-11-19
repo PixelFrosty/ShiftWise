@@ -29,7 +29,7 @@ import { errorText } from '../../core/models';
             <label for="to" class="block text-xs font-bold text-slate-600 mb-1">To</label>
             <input id="to" name="to" type="time" [(ngModel)]="to" class="h-10 border border-slate-300 rounded-md px-2 text-sm" />
           </div>
-          <button type="submit" class="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="add-slot">Add</button>
+          <button type="submit" class="h-10 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="add-slot">Add</button>
         </div>
         @if (error()) { <div class="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="slot-error">{{ error() }}</div> }
       </form>
@@ -46,12 +46,12 @@ import { errorText } from '../../core/models';
                 <span class="text-sm text-slate-400 pt-1" data-testid="day-off">Not available all day</span>
               } @else {
               @for (s of byDay()[$index]; track s.id) {
-                <span class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-sm text-emerald-900" data-testid="slot">
+                <span class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-brand-50 border border-brand-200 text-sm text-brand-900" data-testid="slot">
                   {{ s.start_time.slice(0, 5) }} – {{ s.end_time.slice(0, 5) }}
-                  <button type="button" (click)="remove(s)" class="text-emerald-700 hover:text-rose-600 cursor-pointer" [attr.aria-label]="'Remove ' + d + ' slot'">&times;</button>
+                  <button type="button" (click)="remove(s)" class="text-brand-700 hover:text-rose-600 cursor-pointer" [attr.aria-label]="'Remove ' + d + ' slot'">&times;</button>
                 </span>
               } @empty {
-                <span class="text-sm text-emerald-700 pt-1" data-testid="day-open">Available all day</span>
+                <span class="text-sm text-brand-700 pt-1" data-testid="day-open">Available all day</span>
               }
               }
             </div>

@@ -13,7 +13,7 @@ import { errorText } from '../../core/models';
       <div class="flex items-center justify-between mb-4">
         <h1 class="text-2xl font-bold text-slate-900">Notifications</h1>
         @if (items().length) {
-          <button type="button" (click)="readAll()" class="text-sm text-emerald-700 hover:underline cursor-pointer" data-testid="read-all">Mark all as read</button>
+          <button type="button" (click)="readAll()" class="text-sm text-brand-700 hover:underline cursor-pointer" data-testid="read-all">Mark all as read</button>
         }
       </div>
       @if (error()) { <div class="mb-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm">{{ error() }}</div> }
@@ -22,14 +22,14 @@ import { errorText } from '../../core/models';
       }
       <div class="space-y-2">
         @for (n of items(); track n.id) {
-          <div class="bg-white rounded-lg border p-4 flex items-start gap-3" [class.border-emerald-300]="!n.is_read" [class.border-slate-200]="n.is_read" data-testid="notification">
+          <div class="bg-white rounded-lg border p-4 flex items-start gap-3" [class.border-brand-300]="!n.is_read" [class.border-slate-200]="n.is_read" data-testid="notification">
             <div class="flex-1">
               <div class="text-sm text-slate-800" [class.font-semibold]="!n.is_read">{{ n.message }}</div>
               <div class="text-xs text-slate-400 mt-0.5">{{ n.created_at | date:'medium' }}</div>
               @if (n.transfer_request; as t) {
                 @if (n.kind === 'transfer_request' && t.status === 'pending') {
                   <div class="mt-2 flex gap-2">
-                    <button type="button" (click)="decide(n, t.id, true)" class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer" data-testid="accept">Accept</button>
+                    <button type="button" (click)="decide(n, t.id, true)" class="px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold cursor-pointer" data-testid="accept">Accept</button>
                     <button type="button" (click)="decide(n, t.id, false)" class="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50 text-xs font-semibold cursor-pointer" data-testid="decline">Decline</button>
                   </div>
                 } @else if (n.kind === 'transfer_request') {
@@ -39,7 +39,7 @@ import { errorText } from '../../core/models';
               @if (n.shift_request; as sr) {
                 @if (sr.status === 'pending' && n.kind === 'shift_request' && (sr.kind !== 'offer' || !n.is_read)) {
                   <div class="mt-2 flex gap-2">
-                    <button type="button" (click)="decideShift(n, sr.id, true)" class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer" data-testid="accept-shift">Accept</button>
+                    <button type="button" (click)="decideShift(n, sr.id, true)" class="px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold cursor-pointer" data-testid="accept-shift">Accept</button>
                     <button type="button" (click)="decideShift(n, sr.id, false)" class="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-50 text-xs font-semibold cursor-pointer" data-testid="decline-shift">Decline</button>
                   </div>
                 } @else if (n.kind === 'shift_request' && sr.kind === 'offer') {

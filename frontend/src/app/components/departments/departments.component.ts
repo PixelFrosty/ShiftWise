@@ -14,8 +14,8 @@ import { errorText } from '../../core/models';
 
       <form class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-5 flex gap-3" (ngSubmit)="add()">
         <input name="newName" type="text" placeholder="New department name" maxlength="255" [(ngModel)]="newName" (ngModelChange)="error.set('')"
-               class="flex-1 h-10 border border-slate-300 rounded-md px-3 text-sm outline-none focus:border-emerald-600" data-testid="new-dept" />
-        <button type="submit" class="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="add-dept">Add department</button>
+               class="flex-1 h-10 border border-slate-300 rounded-md px-3 text-sm outline-none focus:border-brand-600" data-testid="new-dept" />
+        <button type="submit" class="h-10 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-md cursor-pointer" data-testid="add-dept">Add department</button>
       </form>
       @if (error()) { <div class="mb-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="dept-error">{{ error() }}</div> }
 
@@ -36,7 +36,7 @@ import { errorText } from '../../core/models';
                 <td class="px-4 py-2">{{ d.managers.length ? d.managers.join(', ') : 'No manager (General Manager covers)' }}</td>
                 <td class="px-4 py-2 text-right whitespace-nowrap">
                   @if (editing === d.id) {
-                    <button type="button" (click)="saveRename(d)" class="text-xs text-emerald-700 hover:underline mr-3 cursor-pointer">Save</button>
+                    <button type="button" (click)="saveRename(d)" class="text-xs text-brand-700 hover:underline mr-3 cursor-pointer">Save</button>
                     <button type="button" (click)="editing = null" class="text-xs text-slate-500 hover:underline cursor-pointer">Cancel</button>
                   } @else {
                     <button type="button" (click)="startRename(d)" class="text-xs text-slate-600 hover:underline mr-3 cursor-pointer">Rename</button>

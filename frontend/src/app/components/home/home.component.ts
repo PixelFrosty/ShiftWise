@@ -35,14 +35,14 @@ const ICON = {
 
         <div class="mt-9 grid gap-5" [style.grid-template-columns]="'repeat(auto-fit, minmax(210px, 1fr))'">
           @for (card of c.cards; track card.title) {
-            <a [routerLink]="card.link" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-300 hover:scale-[1.03] transition duration-300 ease-out p-6 no-underline" [attr.data-testid]="'card-' + card.title.toLowerCase()">
-              <span class="relative inline-flex w-[52px] h-[52px] rounded-xl mb-4 bg-emerald-100 group-hover:bg-emerald-600 transition">
+            <a [routerLink]="card.link" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-brand-300 hover:scale-[1.03] transition duration-300 ease-out p-6 no-underline" [attr.data-testid]="'card-' + card.title.toLowerCase()">
+              <span class="relative inline-flex w-[52px] h-[52px] rounded-xl mb-4 bg-brand-100 group-hover:bg-brand-600 transition">
                 <img [src]="card.icon" alt="" class="absolute inset-0 m-auto w-7 h-7 object-contain transition-opacity group-hover:opacity-0" />
                 <img [src]="card.hoverIcon" alt="" class="absolute inset-0 m-auto w-7 h-7 object-contain opacity-0 transition-opacity group-hover:opacity-100" />
               </span>
               <h2 class="text-xl font-bold text-slate-900">{{ card.title }}</h2>
               <p class="mt-1.5 text-sm text-slate-500 leading-relaxed">{{ card.text }}</p>
-              <span class="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-emerald-700">{{ card.cta }} <span aria-hidden="true" class="transition group-hover:translate-x-0.5">&rarr;</span></span>
+              <span class="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-700">{{ card.cta }} <span aria-hidden="true" class="transition group-hover:translate-x-0.5">&rarr;</span></span>
             </a>
           }
         </div>
@@ -57,7 +57,7 @@ const ICON = {
             @if (c.banner.secondary; as s) {
               <a [routerLink]="s.link" class="px-5 py-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 no-underline">{{ s.label }}</a>
             }
-            <a [routerLink]="c.banner.primary.link" class="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold text-white no-underline shadow-sm">{{ c.banner.primary.label }}</a>
+            <a [routerLink]="c.banner.primary.link" class="px-5 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-sm font-semibold text-white no-underline shadow-sm">{{ c.banner.primary.label }}</a>
           </div>
         </div>
       </section>
