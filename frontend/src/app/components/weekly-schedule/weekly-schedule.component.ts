@@ -71,6 +71,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
   postError = '';
 
   /** Employees see only their own shifts until they expand to all shifts of the department. */
+  calendarOpen = signal(true);
   showAll = signal(false);
 
   shifts = signal<Shift[]>([]);
@@ -264,6 +265,17 @@ export class WeeklyScheduleComponent implements OnDestroy {
   openOnDay(iso: string): number {
     return this.visibleShifts().filter(s => s.shift_date === iso).reduce((n, s) => n + Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0)), 0);
   }
+
+  /** Number of different people scheduled on a day (a person on two shifts counts once). */
+  scheduledOnDay(iso: string): number {
+    const ids = new Set<number>();
+    for (const s of this.visibleShifts()) {
+      if (s.shift_date === iso) {
+        for (const a of s.assignments ?? []) { ids.add(a.employee_id); }
+      }
+    }
+    return ids.size;
+  }
   hasShifts(iso: string): boolean { return this.visibleShifts().some(s => s.shift_date === iso); }
 
   dayName(iso: string): string { return DAY_LONG[(new Date(iso + 'T00:00:00').getDay() + 6) % 7]; }
@@ -292,6 +304,8 @@ export class WeeklyScheduleComponent implements OnDestroy {
   changeDepartment(): void { this.closePanel(); this.reload(); if (this.canEdit) { this.loadStaffData(); } }
 
   runs(id: number): boolean { return this.managedIds.has(id); }
+
+  toggleCalendar(): void { this.calendarOpen.update(v => !v); }
 
   setView(v: 'grid' | 'list'): void {
     this.view.set(v);
