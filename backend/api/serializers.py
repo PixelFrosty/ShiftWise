@@ -92,11 +92,13 @@ class TaskSerializer(serializers.ModelSerializer):
     skills_names = serializers.SerializerMethodField()
     department_name = serializers.CharField(source='department.name', read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True)
+    preferred_day_name = serializers.CharField(source='get_preferred_day_display', read_only=True)
 
     class Meta:
         model = Task
         fields = [
             'id', 'company', 'name', 'description', 'priority', 'preferred_window',
+            'preferred_day', 'preferred_day_name',
             'is_recurring', 'required_people', 'duration_hours', 'skills', 'skills_names',
             'project', 'project_name', 'department', 'department_name', 'employee'
         ]

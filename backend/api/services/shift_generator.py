@@ -426,36 +426,74 @@ class ShiftGeneratorService:
 
         day["scheduled_hours"] += dur_h * headcount
 
+    def _get_target_days_for_recurring_task(
+        self, task: Task, open_days: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns the open days on which a recurring task should be generated.
+        If task.preferred_day is set (0=Monday..6=Sunday), runs only on that weekday.
+        If task.preferred_day is None (flexible), runs on all open days.
+        """
+        if task.preferred_day is not None:
+            matching = [d for d in open_days if d["day_of_week"] == task.preferred_day]
+            if not matching:
+                day_name = dict(Task.Day.choices).get(task.preferred_day, str(task.preferred_day))
+                self.warnings.append(
+                    f"Recurring task '{task.name}' preferred day is {day_name}, but company is closed on that day."
+                )
+            return matching
+        return open_days
+
     def _schedule_non_recurring_task(self, task: Task, open_days: List[Dict[str, Any]]):
-        """Schedules a non-recurring task across open days, balancing load and leveling concurrency."""
+        """Schedules a non-recurring task across open days, respecting preferred_day if set,
+        balancing load and leveling concurrency."""
         headcount = max(1, task.required_people)
         remaining_dur = float(task.duration_hours)
 
-        candidate_days = open_days.copy()
-        if task.employee:
-            available_days = []
-            for d in candidate_days:
-                chunk = min(remaining_dur, d["duration_hours"])
-                start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
-                    d, chunk, task.preferred_window, task.employee
-                )
-                if assigned_emp is not None:
-                    available_days.append((d["scheduled_hours"], d))
-                else:
-                    self.warnings.append(
-                        f"Task '{task.name}' pre-assigned to {task.employee}: {warn}"
-                    )
+        candidate_days: List[Dict[str, Any]] = []
 
-            if available_days:
-                available_days.sort(key=lambda x: x[0])
-                candidate_days = [item[1] for item in available_days]
+        if task.preferred_day is not None:
+            # Task has a specific preferred day
+            day_name = dict(Task.Day.choices).get(task.preferred_day, str(task.preferred_day))
+            pref_day = next((d for d in open_days if d["day_of_week"] == task.preferred_day), None)
+
+            if pref_day:
+                # Preferred day is open: place it first
+                other_days = [d for d in open_days if d != pref_day]
+                other_days.sort(key=lambda d: d["scheduled_hours"])
+                candidate_days = [pref_day] + other_days
             else:
                 self.warnings.append(
-                    f"Task '{task.name}' pre-assigned to {task.employee}: employee has no open days with matching availability during the week. Shifts will be created unassigned."
+                    f"Task '{task.name}' preferred day is {day_name}, but company is closed on that day. Falling back to load-balanced day."
                 )
+
+        if not candidate_days:
+            # No preferred day or preferred day was closed: use employee availability and load-balancing
+            candidate_days = open_days.copy()
+            if task.employee:
+                available_days = []
+                for d in candidate_days:
+                    chunk = min(remaining_dur, d["duration_hours"])
+                    start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
+                        d, chunk, task.preferred_window, task.employee
+                    )
+                    if assigned_emp is not None:
+                        available_days.append((d["scheduled_hours"], d))
+                    else:
+                        self.warnings.append(
+                            f"Task '{task.name}' pre-assigned to {task.employee}: {warn}"
+                        )
+
+                if available_days:
+                    available_days.sort(key=lambda x: x[0])
+                    candidate_days = [item[1] for item in available_days]
+                else:
+                    self.warnings.append(
+                        f"Task '{task.name}' pre-assigned to {task.employee}: employee has no open days with matching availability during the week. Shifts will be created unassigned."
+                    )
+                    candidate_days.sort(key=lambda d: d["scheduled_hours"])
+            else:
                 candidate_days.sort(key=lambda d: d["scheduled_hours"])
-        else:
-            candidate_days.sort(key=lambda d: d["scheduled_hours"])
 
         day_index = 0
         while remaining_dur > 0 and day_index < len(candidate_days):
@@ -518,7 +556,8 @@ class ShiftGeneratorService:
         # Phase 1A: Fixed Recurring Tasks
         for task in fixed_recurring:
             headcount = max(1, task.required_people)
-            for day in open_days:
+            target_days = self._get_target_days_for_recurring_task(task, open_days)
+            for day in target_days:
                 dur = day["duration_hours"] if task.preferred_window == Task.PreferredWindow.OPEN_TO_CLOSE else float(task.duration_hours)
                 start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
                     day, dur, task.preferred_window, task.employee
@@ -537,7 +576,8 @@ class ShiftGeneratorService:
         # Phase 2A: Flexible Recurring Tasks
         for task in flexible_recurring:
             headcount = max(1, task.required_people)
-            for day in open_days:
+            target_days = self._get_target_days_for_recurring_task(task, open_days)
+            for day in target_days:
                 dur = float(task.duration_hours)
                 start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
                     day, dur, task.preferred_window, task.employee

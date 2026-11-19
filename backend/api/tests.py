@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from .admin import EmployeeProfileForm
 from .models import Company, Department, EmployeeProfile, User
-from .serializers import EmployeeProfileSerializer
+from .serializers import EmployeeProfileSerializer, TaskSerializer
 
 class UserModelTests(TestCase):
     def test_create(self):
@@ -1491,6 +1491,59 @@ class ShiftGeneratorTests(APITestCase):
         t2_shift = Schedule.objects.get(task=t2)
         # Week start is Nov 16 (Monday). Tuesday is Nov 17.
         self.assertEqual(t2_shift.shift_date, datetime.date(2026, 11, 17))
+
+    def test_non_recurring_task_respects_preferred_day(self):
+        # Even though Mon, Tue, Wed have 0 load, task specifically requests Thursday (3)
+        t_pref = Task.objects.create(
+            company=self.company, project=self.project, name='Thursday Deep Clean',
+            is_recurring=False, required_people=1, duration_hours=3.0,
+            preferred_day=Task.Day.THURSDAY, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 1)
+        shift = Schedule.objects.get(task=t_pref)
+        # Thursday of week Nov 16 is Nov 19
+        self.assertEqual(shift.shift_date, datetime.date(2026, 11, 19))
+
+    def test_recurring_task_with_preferred_day_only_generates_on_that_weekday(self):
+        # A weekly recurring task that only runs every Wednesday (2)
+        t_rec = Task.objects.create(
+            company=self.company, project=self.project, name='Wednesday All-Hands',
+            is_recurring=True, required_people=1, duration_hours=1.0,
+            preferred_day=Task.Day.WEDNESDAY, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        # Generates only 1 shift for the week on Wednesday Nov 18, rather than 5 on all open days
+        self.assertEqual(res['total_shifts_generated'], 1)
+        shift = Schedule.objects.get(task=t_rec)
+        self.assertEqual(shift.shift_date, datetime.date(2026, 11, 18))
+
+    def test_preferred_day_closed_falls_back_with_warning(self):
+        # Company closed on Saturday (5)
+        t_sat = Task.objects.create(
+            company=self.company, project=self.project, name='Weekend Promo',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_day=Task.Day.SATURDAY, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 1)
+        self.assertTrue(any('company is closed on that day' in w for w in res['warnings']))
+
+    def test_task_serializer_with_preferred_day(self):
+        task = Task.objects.create(
+            company=self.company, project=self.project, name='Task with Preferred Day',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_day=Task.Day.TUESDAY, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+        serializer = TaskSerializer(task)
+        self.assertEqual(serializer.data['preferred_day'], 1)
+        self.assertEqual(serializer.data['preferred_day_name'], 'Tuesday')
 
 
 class ScheduleMultipleEmployeesTests(ScheduleApiBase):

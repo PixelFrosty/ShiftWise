@@ -103,6 +103,8 @@ export interface TaskItem {
   description: string;
   priority: 'low' | 'medium' | 'high';
   preferred_window: string;
+  preferred_day?: number | null;
+  preferred_day_name?: string | null;
   is_recurring: boolean;
   required_people: number;
   duration_hours: number;
