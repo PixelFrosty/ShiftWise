@@ -18,6 +18,14 @@ export interface Project {
   milestones: Milestone[]; milestone_counts: { total: number; done: number };
 }
 
+export interface Skill {
+  id: number;
+  company: number;
+  company_name?: string;
+  name: string;
+  description: string;
+}
+
 export interface Employee {
   id: number;
   user_id: number;
@@ -38,6 +46,8 @@ export interface Employee {
   date_of_birth: string | null;
   age: number | null;
   is_minor: boolean;
+  skills?: number[];
+  skills_names?: string[];
   pending_transfer: { id: number; to_department: DepartmentRef } | null;
 }
 
@@ -429,9 +439,12 @@ export class ApiService {
   deleteMilestone(id: number): Observable<void> { return this.http.delete<void>(`${API_URL}/milestones/${id}/`); }
 
   // time off
-  timeOff(status?: string): Observable<TimeOff[]> {
+  timeOff(status?: string, dateFrom?: string, dateTo?: string, department?: number | null): Observable<TimeOff[]> {
     let params = new HttpParams();
     if (status) { params = params.set('status', status); }
+    if (dateFrom) { params = params.set('date_from', dateFrom); }
+    if (dateTo) { params = params.set('date_to', dateTo); }
+    if (department !== null && department !== undefined) { params = params.set('department', department); }
     return this.http.get<TimeOff[]>(`${API_URL}/time-off/`, { params });
   }
   requestTimeOff(body: { start_date: string; end_date: string; reason: string }): Observable<TimeOff> { return this.http.post<TimeOff>(`${API_URL}/time-off/`, body); }
@@ -476,6 +489,19 @@ export class ApiService {
         ]);
       })
     );
+  }
+
+  // skills API
+  skills(company?: number): Observable<Skill[]> {
+    let params = new HttpParams();
+    if (company !== null && company !== undefined) {
+      params = params.set('company', company);
+    }
+    return this.http.get<Skill[]>(`${API_URL}/skills/`, { params });
+  }
+
+  createSkill(body: { company?: number; name: string; description?: string }): Observable<Skill> {
+    return this.http.post<Skill>(`${API_URL}/skills/`, body);
   }
 
   // schedules API
@@ -805,6 +831,9 @@ export class ApiService {
   }
   clearAssignments(payload: { company_id: number; week_start: string; department_id?: number | null }): Observable<{ cleared_count: number }> {
     return this.http.post<{ cleared_count: number }>(`${API_URL}/schedules/clear-assignments/`, payload);
+  }
+  clearShifts(payload: { company_id: number; week_start: string; department_id?: number | null }): Observable<{ deleted_count: number }> {
+    return this.http.post<{ deleted_count: number }>(`${API_URL}/schedules/clear-shifts/`, payload);
   }
   /** People in one of my departments (default: my home department) who can answer shift requests. */
   coworkers(department?: number): Observable<{ id: number; name: string }[]> {

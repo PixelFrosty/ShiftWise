@@ -3,7 +3,7 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { ApiService, AssignShiftDetail, AssignShiftsPayload, AssignShiftsResult, AutoScheduleResult, Employee, GenerateShiftsPayload, GenerateShiftsResult, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate, TaskItem } from '../../core/api.service';
+import { ApiService, AssignShiftDetail, AssignShiftsPayload, AssignShiftsResult, AutoScheduleResult, Employee, GenerateShiftsPayload, GenerateShiftsResult, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate, TaskItem, TimeOff } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DepartmentRef, errorText } from '../../core/models';
 import { addDays, formatWeekRange, fromIso, mondayOf, toIso } from '../shared/week-utils';
@@ -120,6 +120,14 @@ export class WeeklyScheduleComponent implements OnDestroy {
   clearBusy = false;
   clearError = '';
   clearSuccess = '';
+
+  // clear shifts (delete all entries for the week)
+  clearShiftsPrompt = false;
+  clearShiftsBusy = false;
+  clearShiftsError = '';
+
+  // time-off requests for the viewed week
+  weekTimeOff = signal<TimeOff[]>([]);
   /** Shown when a shift would sit outside the hours of operation; Yes sends it again with allow_outside_hours. */
   outsidePrompt: { text: string; action: 'create' | 'edit' } | null = null;
   confirmPrompt: { kind: 'time_off' | 'warning'; text: string } | null = null;
@@ -383,6 +391,10 @@ export class WeeklyScheduleComponent implements OnDestroy {
       this.api.publication(this.deptId, toIso(this.monday)).subscribe({ next: p => this.pub.set(p), error: () => this.pub.set(null) });
     }
     const dept = this.deptId;
+    this.api.timeOff(undefined, toIso(this.monday), toIso(addDays(this.monday, 6)), dept).subscribe({
+      next: list => this.weekTimeOff.set(list),
+      error: () => this.weekTimeOff.set([])
+    });
     // an employee loads every department they may see at once, so extra departments add into the hours card
     this.api.shifts(this.isStaff ? dept : null, toIso(this.monday), toIso(addDays(this.monday, 6))).subscribe({
       next: list => {
@@ -661,12 +673,83 @@ export class WeeklyScheduleComponent implements OnDestroy {
     });
   }
 
+  // --- clear shifts (delete all entries for the week) ---
+  openClearShifts(): void {
+    this.clearShiftsPrompt = true;
+    this.clearShiftsBusy = false;
+    this.clearShiftsError = '';
+  }
+
+  closeClearShifts(): void {
+    if (this.clearShiftsBusy) { return; }
+    this.clearShiftsPrompt = false;
+    this.clearShiftsBusy = false;
+    this.clearShiftsError = '';
+  }
+
+  confirmClearShifts(): void {
+    if (this.clearShiftsBusy) { return; }
+    this.clearShiftsBusy = true;
+    this.clearShiftsError = '';
+
+    const companyId = this.auth.me()?.profile?.company?.id ?? 1;
+    const payload = {
+      company_id: companyId,
+      week_start: toIso(this.monday),
+      department_id: this.deptId,
+    };
+
+    this.api.clearShifts(payload).subscribe({
+      next: res => {
+        this.clearShiftsBusy = false;
+        this.clearShiftsPrompt = false;
+        this.clearSuccess = `Deleted ${res.deleted_count} shift entr${res.deleted_count === 1 ? 'y' : 'ies'} for this week.`;
+        this.reload();
+        setTimeout(() => { this.clearSuccess = ''; }, 6000);
+      },
+      error: err => {
+        this.clearShiftsBusy = false;
+        this.clearShiftsError = errorText(err) || 'Failed to clear shift entries.';
+      }
+    });
+  }
+
+  // --- time off signifier helpers ---
+  getTimeOff(empId: number, dateIso: string): TimeOff | null {
+    if (!empId || !dateIso) { return null; }
+    return this.weekTimeOff().find(to =>
+      to.employee === empId &&
+      to.status !== 'denied' &&
+      to.start_date <= dateIso &&
+      to.end_date >= dateIso
+    ) ?? null;
+  }
+
+  hasTimeOff(empId: number, dateIso: string): boolean {
+    return this.getTimeOff(empId, dateIso) !== null;
+  }
+
+  isApprovedTimeOff(empId: number, dateIso: string): boolean {
+    const to = this.getTimeOff(empId, dateIso);
+    return to !== null && to.status === 'approved';
+  }
+
+  timeOffLabel(empId: number, dateIso: string): string {
+    const to = this.getTimeOff(empId, dateIso);
+    if (!to) { return ''; }
+    return to.status === 'approved' ? 'Time Off' : 'Pending Off';
+  }
+
   runAuto(confirmPending = false): void {
     this.openShiftAssignment();
   }
 
-  nameClass(p: ShiftPerson): string {
+  nameClass(p: ShiftPerson, dateIso?: string): string {
+    const isOff = dateIso ? this.hasTimeOff(p.employee_id, dateIso) : false;
     const base = 'inline-flex items-center max-w-full truncate rounded-md border px-1.5 py-0.5 text-xs leading-tight ';
+    if (isOff) {
+      return base + 'bg-rose-100 border-rose-400 text-rose-800 font-bold';
+    }
     const look = this.isMine(p) ? 'bg-brand-600 border-brand-700 text-white'
       : p.is_minor ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'bg-brand-50 border-brand-300 text-brand-800';
     return base + look + (this.isMine(p) ? ' font-bold' : ' font-semibold');

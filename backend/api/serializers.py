@@ -26,6 +26,15 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
+class SkillSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    company = serializers.PrimaryKeyRelatedField(queryset=Company.objects.all(), required=False)
+
+    class Meta:
+        model = Skill
+        fields = ['id', 'company', 'company_name', 'name', 'description']
+
+
 class EmployeeProfileSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     name = serializers.SerializerMethodField()
@@ -33,12 +42,14 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField(source='user.last_name', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True)
+    skills = serializers.PrimaryKeyRelatedField(queryset=Skill.objects.all(), many=True, required=False)
+    skills_names = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
         fields = ['id', 'user', 'employee_name', 'name', 'first_name', 'last_name', 'email',
                   'company', 'department', 'department_name', 'role', 'position',
-                  'productivity_score', 'pay_rate', 'created_at', 'modified_at']
+                  'productivity_score', 'pay_rate', 'skills', 'skills_names', 'created_at', 'modified_at']
         read_only_fields = ['created_at', 'modified_at']
 
     def get_employee_name(self, obj):
@@ -46,6 +57,9 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
 
     def get_name(self, obj):
         return obj.user.get_full_name() or obj.user.email
+
+    def get_skills_names(self, obj):
+        return [s.name for s in obj.skills.all()]
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
@@ -66,6 +80,13 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         department = attrs.get('department', getattr(self.instance, 'department', None))
         if company and department and department.company_id != company.pk:
             raise serializers.ValidationError({'department': 'Department does not belong to this company.'})
+        skills = attrs.get('skills')
+        if company and skills:
+            invalid_skills = [s for s in skills if s.company_id != company.pk]
+            if invalid_skills:
+                raise serializers.ValidationError(
+                    {'skills': 'All assigned skills must belong to the employee company.'}
+                )
         return attrs
 
 
@@ -105,6 +126,17 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def get_skills_names(self, obj):
         return [s.name for s in obj.skills.all()]
+
+    def validate(self, attrs):
+        company = attrs.get('company', getattr(self.instance, 'company', None))
+        skills = attrs.get('skills')
+        if company and skills:
+            invalid_skills = [s for s in skills if s.company_id != company.pk]
+            if invalid_skills:
+                raise serializers.ValidationError(
+                    {'skills': 'All assigned skills must belong to the task company.'}
+                )
+        return attrs
 
 
 class ScheduleSerializer(serializers.ModelSerializer):

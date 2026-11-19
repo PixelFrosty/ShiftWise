@@ -20,6 +20,7 @@ from .models import (
     EmployeeProfile,
     Project,
     Schedule,
+    Skill,
     Task,
     TimeOffRequest,
     User,
@@ -33,6 +34,7 @@ from .serializers import (
     GenerateShiftsSerializer,
     ProjectSerializer,
     ScheduleSerializer,
+    SkillSerializer,
     TaskSerializer,
     TimeOffRequestSerializer,
     UserSerializer,
@@ -478,8 +480,8 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         if not week_start:
             return Response({'error': 'Invalid week_start format.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        monday = week_start - datetime.timedelta(days=week_start.weekday())
-        sunday = monday + datetime.timedelta(days=6)
+        monday = week_start - timedelta(days=week_start.weekday())
+        sunday = monday + timedelta(days=6)
 
         qs = Schedule.objects.filter(
             shift_date__gte=monday,
@@ -487,9 +489,9 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             status=Schedule.Status.SCHEDULED,
         )
         if dept_id:
-            qs = qs.filter(Q(task__department_id=dept_id) | Q(department_id=dept_id))
+            qs = qs.filter(Q(task__department_id=dept_id) | Q(department_id=dept_id) | Q(employee__department_id=dept_id))
         elif company_id:
-            qs = qs.filter(Q(task__company_id=company_id) | Q(company_id=company_id))
+            qs = qs.filter(Q(task__company_id=company_id) | Q(company_id=company_id) | Q(department__company_id=company_id) | Q(employee__company_id=company_id))
 
         count_updated = qs.filter(employee__isnull=False).update(employee=None)
 
@@ -499,6 +501,59 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             'week_end': sunday.isoformat(),
             'department_id': dept_id,
             'cleared_count': count_updated,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='clear-shifts')
+    def clear_shifts(self, request):
+        """
+        POST /api/schedules/clear-shifts/
+        Body: { "company_id": 1, "week_start": "YYYY-MM-DD", "department_id": null }
+        Deletes all scheduled shift entries for the specified week (leaving 0 shifts).
+        """
+        company_id = request.data.get('company_id')
+        dept_id = request.data.get('department_id') or request.data.get('department')
+        week_start_str = request.data.get('week_start') or request.data.get('date_from')
+
+        if not company_id and dept_id:
+            dept = Department.objects.filter(pk=dept_id).first()
+            if dept:
+                company_id = dept.company_id
+        if not company_id and request.user.is_authenticated:
+            prof = getattr(request.user, 'employee_profiles', None)
+            if prof and prof.exists():
+                company_id = prof.first().company_id
+        if not company_id:
+            first_c = Company.objects.first()
+            if first_c:
+                company_id = first_c.id
+
+        if not week_start_str:
+            return Response({'error': 'week_start is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        week_start = parse_date(str(week_start_str))
+        if not week_start:
+            return Response({'error': 'Invalid week_start format.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        monday = week_start - timedelta(days=week_start.weekday())
+        sunday = monday + timedelta(days=6)
+
+        qs = Schedule.objects.filter(
+            shift_date__gte=monday,
+            shift_date__lte=sunday,
+        )
+        if dept_id:
+            qs = qs.filter(Q(task__department_id=dept_id) | Q(department_id=dept_id) | Q(employee__department_id=dept_id))
+        elif company_id:
+            qs = qs.filter(Q(task__company_id=company_id) | Q(company_id=company_id) | Q(department__company_id=company_id) | Q(employee__company_id=company_id))
+
+        count_deleted, _ = qs.delete()
+
+        return Response({
+            'company_id': company_id,
+            'week_start': monday.isoformat(),
+            'week_end': sunday.isoformat(),
+            'department_id': dept_id,
+            'deleted_count': count_deleted,
         }, status=status.HTTP_200_OK)
 
 
@@ -642,6 +697,32 @@ class TaskViewSet(viewsets.ModelViewSet):
         if 'department' in params:
             qs = qs.filter(department_id=int_param(params, 'department'))
         return qs
+
+
+class SkillViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for company skills.
+    Optional list filter: ?company=<id>
+    """
+    serializer_class = SkillSerializer
+
+    def get_queryset(self):
+        qs = Skill.objects.select_related('company')
+        if 'company' in self.request.query_params:
+            qs = qs.filter(company_id=int_param(self.request.query_params, 'company'))
+        elif self.request.user.is_authenticated:
+            prof = getattr(self.request.user, 'employee_profiles', None)
+            if prof and prof.exists():
+                qs = qs.filter(company_id=prof.first().company_id)
+        return qs
+
+    def perform_create(self, serializer):
+        if 'company' not in serializer.validated_data and self.request.user.is_authenticated:
+            prof = getattr(self.request.user, 'employee_profiles', None)
+            if prof and prof.exists():
+                serializer.save(company=prof.first().company)
+                return
+        serializer.save()
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):

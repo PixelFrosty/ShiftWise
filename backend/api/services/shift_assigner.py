@@ -103,7 +103,7 @@ class SmartShiftAssignerService:
             )
 
         all_schedules = list(
-            schedules_qs.select_related("task", "employee", "employee__user")
+            schedules_qs.select_related("task", "employee", "employee__user").prefetch_related("task__skills")
         )
 
         unassigned_shifts = [s for s in all_schedules if s.employee_id is None]
@@ -133,7 +133,7 @@ class SmartShiftAssignerService:
 
         emp_ids = [e.id for e in employees]
         emp_by_id = {e.id: e for e in employees}
-        emp_skills: Dict[int, Set[int]] = {e.id: set(e.skills.values_list("id", flat=True)) for e in employees}
+        emp_skills: Dict[int, Set[int]] = {e.id: {sk.id for sk in e.skills.all()} for e in employees}
         emp_max_hours: Dict[int, float] = {e.id: float(e.max_weekly_hours or 40.0) for e in employees}
 
         # 3. Pre-fetch availability slots and time-off requests
@@ -210,11 +210,11 @@ class SmartShiftAssignerService:
             unfilled[s.id] = model.NewBoolVar(f"unfilled_{s.id}")
             eligible_employees_for_shift[s.id] = []
 
-            req_skills = set(s.task.skills.values_list("id", flat=True)) if s.task else set()
+            req_skills = {sk.id for sk in s.task.skills.all()} if s.task else set()
 
             for e in employees:
-                # Condition 1: Skill alignment
-                if not req_skills.issubset(emp_skills[e.id]):
+                # Condition 1: Skill alignment - employee must possess all required skills
+                if req_skills and not req_skills.issubset(emp_skills[e.id]):
                     continue
 
                 # Condition 2: Exact availability and no time-off
@@ -403,6 +403,12 @@ class SmartShiftAssignerService:
             for s in unassigned_shifts:
                 is_unfilled = solver.Value(unfilled[s.id]) == 1
                 if is_unfilled:
+                    shift_req_skills = {sk.id for sk in s.task.skills.all()} if s.task else set()
+                    if shift_req_skills and not any(shift_req_skills.issubset(emp_skills[e.id]) for e in employees):
+                        skill_names = [sk.name for sk in s.task.skills.all()]
+                        reason = f"No employee has the required skill(s): {', '.join(skill_names)}."
+                    else:
+                        reason = "No eligible or available employee found within hours cap."
                     unfillable_shifts.append(
                         {
                             "schedule_id": s.id,
@@ -410,7 +416,7 @@ class SmartShiftAssignerService:
                             "shift_date": s.shift_date.isoformat(),
                             "start_time": s.start_time.strftime("%H:%M"),
                             "end_time": s.end_time.strftime("%H:%M"),
-                            "reason": "No eligible or available employee found within hours cap.",
+                            "reason": reason,
                         }
                     )
                 else:

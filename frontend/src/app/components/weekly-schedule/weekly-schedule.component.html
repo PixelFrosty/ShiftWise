@@ -39,6 +39,7 @@
       <button type="button" (click)="openShiftGeneration()" class="h-9 px-4 rounded-lg border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-semibold cursor-pointer" data-testid="shift-generation" title="Generate weekly shifts from tasks">Smart Shift Generation</button>
       <button type="button" (click)="openShiftAssignment()" class="h-9 px-4 rounded-lg border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-semibold cursor-pointer" data-testid="shift-assignment" [attr.data-testid]="'auto-schedule'" title="Assign employees to open shift slots">Smart Shift Assignment</button>
       <button type="button" (click)="openClearAssignments()" class="h-9 px-4 rounded-lg border border-rose-300 text-rose-700 hover:bg-rose-50 text-sm font-semibold cursor-pointer" data-testid="clear-assignments" title="Unassign all employees from shifts this week">Clear all assignments</button>
+      <button type="button" (click)="openClearShifts()" class="h-9 px-4 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 text-sm font-semibold cursor-pointer" data-testid="clear-shifts" title="Delete all shift entries for this week">Clear all shifts</button>
       @if (isCeo) {
         <button type="button" (click)="openHours()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="hours">Hours of operation</button>
       }
@@ -336,6 +337,40 @@
     </div>
   }
 
+  <!-- Clear Shifts Confirmation Modal (Delete all entries for the week) -->
+  @if (clearShiftsPrompt) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" (click)="closeClearShifts()">
+      <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center space-y-4" (click)="$event.stopPropagation()" role="dialog" aria-label="Clear All Shifts" data-testid="clear-shifts-modal">
+        <div class="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto text-xl font-bold">🗑️</div>
+
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Clear All Shift Entries?</h2>
+          <p class="text-xs text-slate-500">{{ shortRange }} · {{ deptId === null ? 'All departments' : deptName }}</p>
+        </div>
+
+        <div class="p-3 bg-red-50 border border-red-200 rounded-xl text-left text-xs text-red-900 space-y-1">
+          <p class="font-bold">Are you sure you want to delete all shift entries?</p>
+          <p class="leading-relaxed">
+            This will permanently delete all scheduled shifts for this week. This includes both open and assigned shifts. You will be left with an empty schedule for this week. This action cannot be undone.
+          </p>
+        </div>
+
+        @if (clearShiftsError) {
+          <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs text-left" data-testid="clear-shifts-error">
+            {{ clearShiftsError }}
+          </div>
+        }
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" (click)="closeClearShifts()" [disabled]="clearShiftsBusy" class="px-4 h-9 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer disabled:opacity-50" data-testid="clear-shifts-cancel">Cancel</button>
+          <button type="button" (click)="confirmClearShifts()" [disabled]="clearShiftsBusy" class="px-5 h-9 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="clear-shifts-submit">
+            {{ clearShiftsBusy ? 'Deleting…' : 'Delete All Shifts' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
   <!-- Draft / posted -->
   @if (pub(); as p) {
     @if (isStaff) {
@@ -442,7 +477,12 @@
                     </div>
                     <div class="flex flex-wrap gap-1">
                       @for (a of s.assignments; track a.id) {
-                        <span [class]="nameClass(a)" [attr.data-minor]="a.is_minor" data-testid="shift-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span>
+                        <span [class]="nameClass(a, s.shift_date)" [attr.data-minor]="a.is_minor" data-testid="shift-name">
+                          {{ a.name }}{{ isMine(a) ? ' (you)' : '' }}
+                          @if (hasTimeOff(a.employee_id, s.shift_date)) {
+                            <span class="ml-1 inline-flex items-center px-1 rounded text-[10px] font-bold bg-rose-600 text-white" title="Scheduled on time off day">Off</span>
+                          }
+                        </span>
                       }
                     </div>
                     @for (a of s.assignments; track a.id) {
@@ -508,7 +548,14 @@
                     } @else {
                       <div class="text-[11px] text-slate-600 leading-tight">{{ p.shift.name ? p.shift.name + ' · ' : '' }}{{ timeRange(p.shift) }}{{ p.shift.outside_hours ? ' · outside hours' : '' }}</div>
                       @for (a of p.shift.assignments; track a.id) {
-                        <div><span [class]="nameClass(a)" [attr.data-minor]="a.is_minor" data-testid="shift-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span></div>
+                        <div>
+                          <span [class]="nameClass(a, p.shift.shift_date)" [attr.data-minor]="a.is_minor" data-testid="shift-name">
+                            {{ a.name }}{{ isMine(a) ? ' (you)' : '' }}
+                            @if (hasTimeOff(a.employee_id, p.shift.shift_date)) {
+                              <span class="ml-1 inline-flex items-center px-1 rounded text-[10px] font-bold bg-rose-600 text-white" title="Scheduled on time off day">Off</span>
+                            }
+                          </span>
+                        </div>
                         @if (isMine(a) && a.note) { <div class="text-[11px] italic text-slate-600 truncate" data-testid="my-note">Note: {{ a.note }}</div> }
                       }
                       @if (p.shift.open_count > 0) {
@@ -549,8 +596,15 @@
 
         <ul class="my-4 space-y-2" data-testid="shift-people">
           @for (a of s.assignments; track a.id) {
-            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2">
-              <span class="text-sm"><span [class]="nameClass(a)" [attr.data-minor]="a.is_minor" data-testid="panel-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span>@if (a.is_minor) { <span class="ml-1 text-[11px] text-yellow-700">under 18 · limits apply</span> }<span class="text-slate-500">{{ a.is_roster ? ' · no login' : '' }}</span></span>
+            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2" [class]="hasTimeOff(a.employee_id, s.shift_date) ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'">
+              <span class="text-sm">
+                <span [class]="nameClass(a, s.shift_date)" [attr.data-minor]="a.is_minor" data-testid="panel-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span>
+                @if (hasTimeOff(a.employee_id, s.shift_date)) {
+                  <span class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-600 text-white" data-testid="timeoff-conflict-badge">⚠️ Off Today ({{ timeOffLabel(a.employee_id, s.shift_date) }})</span>
+                }
+                @if (a.is_minor) { <span class="ml-1 text-[11px] text-yellow-700">under 18 · limits apply</span> }
+                <span class="text-slate-500">{{ a.is_roster ? ' · no login' : '' }}</span>
+              </span>
               <span class="flex gap-2 text-xs">
                 @if (canEdit) {
                   <button type="button" (click)="startNote(a)" class="text-blue-700 hover:underline cursor-pointer" [attr.data-testid]="'note-btn-' + a.id">{{ a.note ? 'Edit note' : 'Add note' }}</button>
@@ -621,7 +675,9 @@
               <div class="flex flex-wrap gap-2">
                 <select [(ngModel)]="toAdd" name="toAdd" class="flex-1 h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="add-person">
                   <option [ngValue]="null">Add an employee…</option>
-                  @for (p of addable; track p.id) { <option [ngValue]="p.id">{{ p.name }}</option> }
+                  @for (p of addable; track p.id) {
+                    <option [ngValue]="p.id">{{ p.name }}{{ hasTimeOff(p.id, s.shift_date) ? ' 🔴 [Off Today - ' + timeOffLabel(p.id, s.shift_date) + ']' : '' }}</option>
+                  }
                 </select>
                 <button type="button" (click)="addPerson()" [disabled]="!toAdd || busy" class="h-9 px-3 rounded-md text-sm bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 cursor-pointer" data-testid="add-person-btn">Add</button>
                 <button type="button" (click)="empDir.openAddModal()" class="h-9 px-3 rounded-md text-sm border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium cursor-pointer" title="Create and add a new employee" data-testid="new-employee-btn">+ New Employee</button>
@@ -632,13 +688,21 @@
                   <div class="text-xs text-slate-600 font-medium mb-1">Or select multiple employees (max {{ s.open_count }}):</div>
                   <div class="max-h-28 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-white">
                     @for (p of addable; track p.id) {
-                      <label class="flex items-center gap-2 text-xs py-0.5 cursor-pointer">
-                        <input type="checkbox"
-                               [checked]="toAddList.includes(p.id)"
-                               [disabled]="!toAddList.includes(p.id) && toAddList.length >= s.open_count"
-                               (change)="toggleToAddList(p.id)"
-                               class="rounded text-brand-600 cursor-pointer" />
-                        <span>{{ p.name }}</span>
+                      <label class="flex items-center justify-between gap-2 text-xs py-1 px-1.5 rounded cursor-pointer" [class.bg-rose-50]="hasTimeOff(p.id, s.shift_date)" [class.hover:bg-slate-50]="!hasTimeOff(p.id, s.shift_date)">
+                        <div class="flex items-center gap-2">
+                          <input type="checkbox"
+                                 [checked]="toAddList.includes(p.id)"
+                                 [disabled]="!toAddList.includes(p.id) && toAddList.length >= s.open_count"
+                                 (change)="toggleToAddList(p.id)"
+                                 class="rounded text-brand-600 cursor-pointer" />
+                          <span [class.text-rose-700]="hasTimeOff(p.id, s.shift_date)" [class.font-semibold]="hasTimeOff(p.id, s.shift_date)">{{ p.name }}</span>
+                        </div>
+                        @if (hasTimeOff(p.id, s.shift_date)) {
+                          <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 border border-rose-300 text-rose-700" data-testid="off-indicator">
+                            <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                            Off Today
+                          </span>
+                        }
                       </label>
                     }
                   </div>
@@ -844,7 +908,7 @@
           } @else {
             <div class="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50" data-testid="ns-employee-list">
               @for (emp of addableEmployeesForNewShift; track emp.id) {
-                <label class="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-white cursor-pointer">
+                <label class="flex items-center justify-between text-xs py-1 px-1.5 rounded cursor-pointer" [class.bg-rose-50]="hasTimeOff(emp.id, newShift.shift_date)" [class.hover:bg-white]="!hasTimeOff(emp.id, newShift.shift_date)">
                   <div class="flex items-center gap-2">
                     <input type="checkbox"
                            [checked]="isEmployeeSelectedForNewShift(emp.id)"
@@ -852,12 +916,20 @@
                            (change)="toggleEmployeeForNewShift(emp.id)"
                            class="rounded text-brand-600 cursor-pointer"
                            [attr.data-testid]="'ns-emp-' + emp.id" />
-                    <span class="font-medium text-slate-800">{{ emp.name }}</span>
+                    <span class="font-medium text-slate-800" [class.text-rose-700]="hasTimeOff(emp.id, newShift.shift_date)">{{ emp.name }}</span>
                     <span class="text-slate-400 text-[11px]">{{ emp.position || emp.role }}</span>
                   </div>
-                  @if (isEmployeeSelectedForNewShift(emp.id)) {
-                    <span class="text-[11px] font-semibold text-brand-700">Selected</span>
-                  }
+                  <div class="flex items-center gap-1.5">
+                    @if (hasTimeOff(emp.id, newShift.shift_date)) {
+                      <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 border border-rose-300 text-rose-700" data-testid="new-shift-off-badge">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                        Off Today
+                      </span>
+                    }
+                    @if (isEmployeeSelectedForNewShift(emp.id)) {
+                      <span class="text-[11px] font-semibold text-brand-700">Selected</span>
+                    }
+                  </div>
                 </label>
               }
             </div>

@@ -12,6 +12,7 @@ router.register('compatibility', views.CompatibilityScoreViewSet, basename='comp
 router.register('availability', views.AvailabilitySlotViewSet, basename='availability')
 router.register('time-off', views.TimeOffRequestViewSet, basename='time-off')
 router.register('projects', views.ProjectViewSet, basename='project')
+router.register('skills', views.SkillViewSet, basename='skill')
 
 urlpatterns = [
     path('test/', views.test, name='test_api'),

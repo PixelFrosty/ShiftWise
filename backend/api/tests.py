@@ -1805,5 +1805,161 @@ class SmartShiftAssignerApiTests(ScheduleApiBase):
         # self.employee is on leave, so self.emp2 must be assigned
         self.assertEqual(s.employee, self.emp2)
 
+    def test_clear_assignments_endpoint(self):
+        # Create schedules with employees
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 1',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=self.employee,
+            status=Schedule.Status.SCHEDULED,
+        )
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 2',
+            shift_date=self.week_start + datetime.timedelta(days=1),
+            start_time=datetime.time(14, 0),
+            end_time=datetime.time(18, 0),
+            employee=self.emp2,
+            status=Schedule.Status.SCHEDULED,
+        )
+        url = reverse('schedule-clear-assignments')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['cleared_count'], 2)
+
+        s1.refresh_from_db()
+        s2.refresh_from_db()
+        self.assertIsNone(s1.employee)
+        self.assertIsNone(s2.employee)
+        # Shift records must still exist
+        self.assertEqual(Schedule.objects.filter(pk__in=[s1.pk, s2.pk]).count(), 2)
+
+    def test_clear_shifts_endpoint(self):
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 1',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=self.employee,
+            status=Schedule.Status.SCHEDULED,
+        )
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 2',
+            shift_date=self.week_start + datetime.timedelta(days=2),
+            start_time=datetime.time(14, 0),
+            end_time=datetime.time(18, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+        url = reverse('schedule-clear-shifts')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['deleted_count'], 2)
+
+        self.assertEqual(Schedule.objects.filter(pk__in=[s1.pk, s2.pk]).count(), 0)
+
+    def test_skills_crud_and_independent_assignment(self):
+        # 1. Create a skill for the company via Skill API
+        url = reverse('skill-list')
+        res = self.client.post(url, {'name': 'First Aid', 'description': 'CPR & First Aid'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        skill_id = res.data['id']
+        self.assertEqual(res.data['name'], 'First Aid')
+
+        skill = Skill.objects.get(pk=skill_id)
+        # Verify creating skill does NOT give it to all employees or all tasks
+        self.assertEqual(skill.employees.count(), 0)
+        self.assertEqual(skill.tasks.count(), 0)
+
+        # 2. Assign skill to an individual employee
+        emp_url = reverse('employee-detail', args=[self.emp2.pk])
+        emp_res = self.client.patch(emp_url, {'skills': [skill_id]}, format='json')
+        self.assertEqual(emp_res.status_code, status.HTTP_200_OK)
+        self.emp2.refresh_from_db()
+        self.employee.refresh_from_db()
+        self.assertIn(skill, self.emp2.skills.all())
+        self.assertNotIn(skill, self.employee.skills.all())
+
+        # 3. Assign skill to an individual task
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='First Aid Station',
+            required_people=1,
+            duration_hours=4.0
+        )
+        task_url = reverse('task-detail', args=[task.pk])
+        task_res = self.client.patch(task_url, {'skills': [skill_id]}, format='json')
+        self.assertEqual(task_res.status_code, status.HTTP_200_OK)
+        task.refresh_from_db()
+        self.assertIn(skill, task.skills.all())
+
+        # 4. Verify cross-company skill assignment is rejected
+        other_comp = Company.objects.create(name='Other Corp')
+        other_skill = Skill.objects.create(company=other_comp, name='Hazardous Materials')
+        bad_task_res = self.client.patch(task_url, {'skills': [other_skill.pk]}, format='json')
+        self.assertEqual(bad_task_res.status_code, status.HTTP_400_BAD_REQUEST)
+        bad_emp_res = self.client.patch(emp_url, {'skills': [other_skill.pk]}, format='json')
+        self.assertEqual(bad_emp_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_assign_shifts_unfillable_when_no_employee_has_skill(self):
+        welding = Skill.objects.create(company=self.employee.company, name='Welding')
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Structural Welding',
+            required_people=1,
+            duration_hours=4.0
+        )
+        task.skills.add(welding)
+        # Neither self.employee nor self.emp2 has Welding skill
+
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task=task,
+            task_name=task.name,
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots_filled'], 0)
+        self.assertEqual(res.data['unfillable_slots'], 1)
+        self.assertIn('Welding', res.data['unfillable_details'][0]['reason'])
+
+        s.refresh_from_db()
+        self.assertIsNone(s.employee)
+
+
 
 
