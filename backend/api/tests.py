@@ -1335,3 +1335,109 @@ class ShiftGeneratorTests(APITestCase):
         self.assertTrue(any('do not cover shift' in w for w in res['warnings']))
 
 
+class ScheduleMultipleEmployeesTests(ScheduleApiBase):
+    def setUp(self):
+        super().setUp()
+        self.emp2 = make_employee('emp2@example.com', department=self.employee.department)
+        self.emp3 = make_employee('emp3@example.com', department=self.employee.department)
+        self.task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Multi Cashier',
+            required_people=2,
+            duration_hours=4.0
+        )
+
+    def test_create_schedule_with_list_of_employees(self):
+        payload = {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.employee.pk, self.emp2.pk],
+            'notes': 'Team shift'
+        }
+        res = self.client.post(self.list_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(res.data), 2)
+        # Check database rows (1-entry-per-employee)
+        db_rows = Schedule.objects.filter(task=self.task, shift_date=DAY)
+        self.assertEqual(db_rows.count(), 2)
+        assigned_ids = set(db_rows.values_list('employee_id', flat=True))
+        self.assertEqual(assigned_ids, {self.employee.pk, self.emp2.pk})
+
+    def test_create_schedule_with_open_slots_up_to_headcount(self):
+        # Task requires 2 people, but only 1 employee provided
+        payload = {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.employee.pk],
+            'notes': 'Partial team'
+        }
+        res = self.client.post(self.list_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(res.data), 2)
+        db_rows = Schedule.objects.filter(task=self.task, shift_date=DAY)
+        self.assertEqual(db_rows.count(), 2)
+        self.assertEqual(db_rows.filter(employee=self.employee).count(), 1)
+        self.assertEqual(db_rows.filter(employee__isnull=True).count(), 1)
+
+    def test_create_schedule_exceeding_headcount_rejected(self):
+        # Task requires 2 people, but 3 provided
+        payload = {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.employee.pk, self.emp2.pk, self.emp3.pk]
+        }
+        res = self.client.post(self.list_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('employees', res.data)
+        self.assertIn('Cannot add more than 2 employees', res.data['employees'][0])
+
+    def test_assign_employee_to_existing_schedule_entry(self):
+        # Create unassigned slot
+        Schedule.objects.create(
+            task=self.task, task_name=self.task.name, shift_date=DAY,
+            start_time='09:00', end_time='13:00', employee=self.employee
+        )
+        Schedule.objects.create(
+            task=self.task, task_name=self.task.name, shift_date=DAY,
+            start_time='09:00', end_time='13:00', employee=None
+        )
+        url = reverse('schedule-assign-employees')
+        res = self.client.post(url, {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.emp2.pk]
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # Now 2 employees are assigned, 0 unassigned
+        db_rows = Schedule.objects.filter(task=self.task, shift_date=DAY)
+        self.assertEqual(db_rows.filter(employee__isnull=False).count(), 2)
+        self.assertEqual(db_rows.filter(employee__isnull=True).count(), 0)
+
+        # Attempting to assign a 3rd employee exceeds headcount of 2
+        res2 = self.client.post(url, {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.emp3.pk]
+        }, format='json')
+        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('employees', res2.data)
+
+    def test_tasks_endpoint(self):
+        url = reverse('task-list')
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(any(t['name'] == 'Multi Cashier' for t in res.data))
+
+
+

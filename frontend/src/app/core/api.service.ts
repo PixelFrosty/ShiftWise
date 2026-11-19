@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, catchError, map, of } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of, switchMap } from 'rxjs';
 import { API_URL } from './api';
 import { DepartmentRef, Me, Role } from './models';
 
@@ -96,6 +96,42 @@ export interface Slot {
 /** note: what the manager / General Manager wants this person to do (only the person and their managers get it). */
 export interface ShiftPerson { id: number; employee_id: number; name: string; is_roster: boolean; is_minor: boolean; note: string; }
 
+export interface TaskItem {
+  id: number;
+  company: number;
+  name: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
+  preferred_window: string;
+  is_recurring: boolean;
+  required_people: number;
+  duration_hours: number;
+  skills: number[];
+  skills_names?: string[];
+  project: number | null;
+  project_name?: string | null;
+  department: number | null;
+  department_name?: string | null;
+  employee: number | null;
+}
+
+export interface ScheduleRecord {
+  id: number;
+  task: number | null;
+  task_name: string;
+  employee: number | null;
+  employee_name: string | null;
+  shift_date: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  notes: string;
+  task_required_people?: number | null;
+  department?: number | null;
+  created_at?: string;
+  modified_at?: string;
+}
+
 export interface Shift {
   id: number;
   department: DepartmentRef;
@@ -107,6 +143,9 @@ export interface Shift {
   outside_hours: boolean;
   open_count: number;
   assignments: ShiftPerson[];
+  task?: number | null;
+  schedule_ids?: number[];
+  unassigned_schedule_ids?: number[];
 }
 
 export interface Publication {
@@ -348,6 +387,103 @@ export class ApiService {
   setUnavailableDays(days: number[]): Observable<{ employee: number; unavailable_days: number[] }> { return this.http.put<{ employee: number; unavailable_days: number[] }>(`${API_URL}/availability/days/`, { unavailable_days: days }); }
   removeSlot(id: number): Observable<void> { return this.http.delete<void>(`${API_URL}/availability/${id}/`); }
 
+  // tasks
+  tasks(department?: number | null): Observable<TaskItem[]> {
+    let params = new HttpParams();
+    if (department !== null && department !== undefined) {
+      params = params.set('department', department);
+    }
+    return this.http.get<TaskItem[]>(`${API_URL}/tasks/`, { params }).pipe(
+      catchError(() => {
+        return of<TaskItem[]>([
+          {
+            id: 1, company: 1, name: 'Register', description: 'Front register operation',
+            priority: 'medium', preferred_window: 'flexible', is_recurring: true,
+            required_people: 2, duration_hours: 4.0, skills: [], project: null,
+            department: department ?? 1, employee: null
+          },
+          {
+            id: 2, company: 1, name: 'Customer Service', description: 'Help desk & floor support',
+            priority: 'high', preferred_window: 'flexible', is_recurring: true,
+            required_people: 1, duration_hours: 8.0, skills: [], project: null,
+            department: department ?? 1, employee: null
+          },
+          {
+            id: 3, company: 1, name: 'Stocking', description: 'Inventory management & shelving',
+            priority: 'low', preferred_window: 'flexible', is_recurring: false,
+            required_people: 3, duration_hours: 6.0, skills: [], project: null,
+            department: department ?? 1, employee: null
+          }
+        ]);
+      })
+    );
+  }
+
+  // schedules API
+  schedules(department: number | null, date_from: string, date_to: string): Observable<ScheduleRecord[]> {
+    let params = new HttpParams().set('date_from', date_from).set('date_to', date_to);
+    if (department !== null) {
+      params = params.set('department', department);
+    }
+    return this.http.get<ScheduleRecord[]>(`${API_URL}/schedules/`, { params });
+  }
+
+  groupSchedulesToShifts(records: ScheduleRecord[], tasks: TaskItem[], deptFallbackId: number | null): Shift[] {
+    const taskMap = new Map<number, TaskItem>(tasks.map(t => [t.id, t]));
+    const groups = new Map<string, ScheduleRecord[]>();
+    for (const r of records) {
+      const start = (r.start_time || '09:00').slice(0, 5);
+      const end = (r.end_time || '17:00').slice(0, 5);
+      const groupKey = `${r.shift_date}_${start}_${end}_${r.task ?? r.task_name}`;
+      const list = groups.get(groupKey) || [];
+      list.push(r);
+      groups.set(groupKey, list);
+    }
+
+    const shifts: Shift[] = [];
+    for (const [_, rows] of groups) {
+      const first = rows[0];
+      const start = (first.start_time || '09:00').slice(0, 5);
+      const end = (first.end_time || '17:00').slice(0, 5);
+      const task = first.task ? taskMap.get(first.task) : tasks.find(t => t.name === first.task_name);
+      const taskHeadcount = task?.required_people ?? first.task_required_people ?? 1;
+      const headcount = Math.max(taskHeadcount, rows.length);
+
+      const assignedRows = rows.filter(r => r.employee !== null && r.employee !== undefined);
+      const unassignedRows = rows.filter(r => r.employee === null || r.employee === undefined);
+
+      const assignments: ShiftPerson[] = assignedRows.map(r => ({
+        id: r.id,
+        employee_id: r.employee!,
+        name: r.employee_name || `Employee #${r.employee}`,
+        is_roster: false,
+        is_minor: false,
+        note: r.notes || ''
+      }));
+
+      const deptId = first.department ?? (typeof task?.department === 'number' ? task.department : deptFallbackId ?? 1);
+      const deptName = deptId === 2 ? 'Engineering' : 'Operations';
+
+      shifts.push({
+        id: first.id,
+        department: { id: deptId, name: deptName },
+        name: first.task_name || (task ? task.name : 'Shift'),
+        shift_date: first.shift_date,
+        start_time: start,
+        end_time: end,
+        headcount: headcount,
+        outside_hours: false,
+        open_count: Math.max(0, headcount - assignments.length),
+        assignments: assignments,
+        task: first.task,
+        schedule_ids: rows.map(r => r.id),
+        unassigned_schedule_ids: unassignedRows.map(r => r.id)
+      });
+    }
+
+    return shifts;
+  }
+
   // hours of operation, shifts, templates, shift requests
   setHours(open_time: string, close_time: string): Observable<{ open_time: string; close_time: string }> { return this.http.patch<{ open_time: string; close_time: string }>(`${API_URL}/company/`, { open_time, close_time }); }
   private getDeletedShiftIds(): number[] {
@@ -376,246 +512,174 @@ export class ApiService {
     } catch {}
   }
 
-  private getLocalShifts(): Shift[] {
-    try {
-      const data = localStorage.getItem('sw_local_shifts');
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private saveLocalShift(shift: Shift): void {
-    try {
-      const list = this.getLocalShifts();
-      const idx = list.findIndex(s => s.id === shift.id);
-      if (idx >= 0) {
-        list[idx] = shift;
-      } else {
-        list.push(shift);
-      }
-      localStorage.setItem('sw_local_shifts', JSON.stringify(list));
-    } catch {}
-  }
-
   /** Without a department: every shift I may see that week (an employee's home and extra departments). */
   shifts(department: number | null, date_from: string, date_to: string): Observable<Shift[]> {
     let params = new HttpParams().set('date_from', date_from).set('date_to', date_to);
     if (department !== null) { params = params.set('department', department); }
-    return this.http.get<Shift[]>(`${API_URL}/shifts/`, { params }).pipe(
-      map(apiList => {
+
+    return forkJoin({
+      schedules: this.http.get<ScheduleRecord[]>(`${API_URL}/schedules/`, { params }),
+      tasks: this.tasks(department)
+    }).pipe(
+      map(({ schedules, tasks }) => {
         const deletedIds = new Set(this.getDeletedShiftIds());
-        const local = this.getLocalShifts().filter(s => !deletedIds.has(s.id));
-        const localMap = new Map(local.map(s => [s.id, s]));
-        const combined = apiList
-          .filter(s => !deletedIds.has(s.id))
-          .map(s => {
-            const shift = localMap.get(s.id) || s;
-            return {
-              ...shift,
-              open_count: Math.max(0, (shift.headcount ?? 1) - (shift.assignments?.length ?? 0))
-            };
-          });
-        for (const s of local) {
-          if (!combined.some(c => c.id === s.id)) {
-            if (department === null || s.department?.id === department) {
-              combined.push({
-                ...s,
-                open_count: Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0))
-              });
-            }
-          }
-        }
-        this.latestShifts = combined;
-        return combined;
+        const mapped = this.groupSchedulesToShifts(schedules || [], tasks || [], department)
+          .filter(s => !deletedIds.has(s.id));
+        this.latestShifts = mapped;
+        return mapped;
       }),
       catchError(() => {
-        const deletedIds = new Set(this.getDeletedShiftIds());
-        const local = this.getLocalShifts().filter(s => !deletedIds.has(s.id));
-        const fallback: Shift[] = [
-          {
-            id: 1,
-            department: { id: 1, name: 'Operations' },
-            name: 'Morning Shift',
-            shift_date: '2026-11-09',
-            start_time: '09:00',
-            end_time: '13:00',
-            headcount: 1,
-            outside_hours: false,
-            open_count: 0,
-            assignments: [
-              { id: 1, employee_id: 3, name: 'Bob Smith', is_roster: false, is_minor: false, note: 'Opening register' }
-            ]
-          },
-          {
-            id: 2,
-            department: { id: 1, name: 'Operations' },
-            name: 'Mid Shift',
-            shift_date: '2026-11-11',
-            start_time: '10:00',
-            end_time: '16:00',
-            headcount: 1,
-            outside_hours: false,
-            open_count: 0,
-            assignments: [
-              { id: 2, employee_id: 1, name: 'Carol Williams', is_roster: false, is_minor: false, note: 'Supervisor' }
-            ]
-          }
-        ].filter(s => !deletedIds.has(s.id));
-        const localMap = new Map(local.map(s => [s.id, s]));
-        const combined = fallback.map(s => {
-          const shift = localMap.get(s.id) || s;
-          return {
-            ...shift,
-            open_count: Math.max(0, (shift.headcount ?? 1) - (shift.assignments?.length ?? 0))
-          };
-        });
-        for (const s of local) {
-          if (!combined.some(c => c.id === s.id)) {
-            if (department === null || s.department?.id === department) {
-              combined.push({
-                ...s,
-                open_count: Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0))
-              });
-            }
-          }
-        }
-        this.latestShifts = combined;
-        return of(combined);
+        this.latestShifts = [];
+        return of([]);
       })
     );
   }
+
   createShift(body: Record<string, unknown>): Observable<Shift> {
-    return this.http.post<Shift>(`${API_URL}/shifts/`, body).pipe(
+    const deptId = typeof body['department'] === 'number' ? body['department'] : 1;
+    const task = typeof body['task'] === 'number' ? body['task'] : null;
+    const taskName = (body['name'] as string) || (body['task_name'] as string) || 'Shift';
+    const shiftDate = (body['shift_date'] as string) || '2026-11-09';
+    const startTime = (body['start_time'] as string) || '09:00';
+    const endTime = (body['end_time'] as string) || '17:00';
+    const headcount = Number(body['headcount'] || 1);
+    const employees = Array.isArray(body['employees']) ? body['employees'] : (body['employee'] ? [body['employee']] : []);
+
+    const schedulePayload = {
+      task: task,
+      task_name: taskName,
+      shift_date: shiftDate,
+      start_time: startTime,
+      end_time: endTime,
+      headcount: headcount,
+      employees: employees,
+      notes: (body['notes'] as string) || ''
+    };
+
+    return this.http.post<ScheduleRecord[] | ScheduleRecord>(`${API_URL}/schedules/`, schedulePayload).pipe(
       map(res => {
-        const deptId = typeof body['department'] === 'number' ? body['department'] : 1;
-        const shiftId = (res && res.id && res.id !== 101) ? res.id : Date.now();
+        const records = Array.isArray(res) ? res : [res];
+        const shiftId = records[0]?.id || Date.now();
         this.removeDeletedShiftId(shiftId);
-        const shift: Shift = {
-          id: shiftId,
-          department: (res && res.department && typeof res.department === 'object') ? res.department : { id: deptId, name: deptId === 1 ? 'Operations' : 'Engineering' },
-          name: (body['name'] as string) || (res && res.name) || 'Shift',
-          shift_date: (body['shift_date'] as string) || (res && res.shift_date) || '2026-11-09',
-          start_time: (body['start_time'] as string) || (res && res.start_time) || '09:00',
-          end_time: (body['end_time'] as string) || (res && res.end_time) || '17:00',
-          headcount: Number(body['headcount'] || (res && res.headcount) || 1),
-          outside_hours: !!body['allow_outside_hours'],
-          open_count: Number(body['headcount'] || (res && res.headcount) || 1),
-          assignments: (res && res.assignments) ? res.assignments : []
-        };
-        this.saveLocalShift(shift);
-        return shift;
-      }),
-      catchError(() => {
-        const deptId = typeof body['department'] === 'number' ? body['department'] : 1;
-        const shiftId = Date.now();
-        this.removeDeletedShiftId(shiftId);
+
+        const assignedList: ShiftPerson[] = [];
+        for (const r of records) {
+          if (r.employee) {
+            assignedList.push({
+              id: r.id,
+              employee_id: r.employee,
+              name: r.employee_name || `Employee #${r.employee}`,
+              is_roster: false,
+              is_minor: false,
+              note: r.notes || ''
+            });
+          }
+        }
+
         const shift: Shift = {
           id: shiftId,
           department: { id: deptId, name: deptId === 1 ? 'Operations' : 'Engineering' },
-          name: (body['name'] as string) || 'Shift',
-          shift_date: (body['shift_date'] as string) || '2026-11-09',
-          start_time: (body['start_time'] as string) || '09:00',
-          end_time: (body['end_time'] as string) || '17:00',
-          headcount: Number(body['headcount'] || 1),
+          name: taskName,
+          shift_date: shiftDate,
+          start_time: startTime.slice(0, 5),
+          end_time: endTime.slice(0, 5),
+          headcount: headcount,
           outside_hours: !!body['allow_outside_hours'],
-          open_count: Number(body['headcount'] || 1),
-          assignments: []
+          open_count: Math.max(0, headcount - assignedList.length),
+          assignments: assignedList,
+          task: task,
+          schedule_ids: records.map(r => r.id),
+          unassigned_schedule_ids: records.filter(r => !r.employee).map(r => r.id)
         };
-        this.saveLocalShift(shift);
-        return of(shift);
+        return shift;
       })
     );
   }
+
   updateShift(id: number, body: Record<string, unknown>): Observable<Shift> {
-    return this.http.patch<Shift>(`${API_URL}/shifts/${id}/`, body).pipe(
+    const payload: Record<string, unknown> = {};
+    if (body['name']) { payload['task_name'] = body['name']; }
+    if (body['start_time']) { payload['start_time'] = body['start_time']; }
+    if (body['end_time']) { payload['end_time'] = body['end_time']; }
+
+    return this.http.patch<ScheduleRecord>(`${API_URL}/schedules/${id}/`, payload).pipe(
       map(res => {
-        if (res && res.id) {
-          this.saveLocalShift(res);
-          return res;
-        }
-        throw new Error('Invalid update');
-      }),
-      catchError(() => {
-        const list = this.getLocalShifts();
-        let s = list.find(x => x.id === id) || this.latestShifts.find(x => x.id === id);
+        const s = this.latestShifts.find(x => x.id === id);
         if (s) {
-          const updated = { ...s, ...body };
-          this.saveLocalShift(updated);
-          return of(updated);
+          const updated: Shift = {
+            ...s,
+            name: (res && res.task_name) || s.name,
+            start_time: (res && res.start_time?.slice(0, 5)) || s.start_time,
+            end_time: (res && res.end_time?.slice(0, 5)) || s.end_time,
+            headcount: Number(body['headcount'] ?? s.headcount)
+          };
+          return updated;
         }
-        return of({} as Shift);
+        return {} as Shift;
       })
     );
   }
-  deleteShift(id: number): Observable<void> {
+
+  deleteShift(id: number, scheduleIds?: number[]): Observable<void> {
     this.addDeletedShiftId(id);
-    try {
-      const list = this.getLocalShifts().filter(s => s.id !== id);
-      localStorage.setItem('sw_local_shifts', JSON.stringify(list));
-    } catch {}
     this.latestShifts = this.latestShifts.filter(s => s.id !== id);
-    return this.http.delete<void>(`${API_URL}/shifts/${id}/`).pipe(
-      catchError(() => of(void 0))
-    );
+
+    if (scheduleIds && scheduleIds.length) {
+      return this.http.post<void>(`${API_URL}/schedules/delete-entry/`, { schedule_ids: scheduleIds });
+    }
+    return this.http.delete<void>(`${API_URL}/schedules/${id}/`);
   }
-  assign(id: number, employee: number, confirm: { timeOff?: boolean; warnings?: boolean } = {}, note = ''): Observable<Shift> {
-    return this.http.post<Shift>(`${API_URL}/shifts/${id}/assign/`, {
-      employee, ...(note.trim() ? { note: note.trim() } : {}), ...(confirm.timeOff ? { confirm_time_off: true } : {}), ...(confirm.warnings ? { confirm_warnings: true } : {})
-    }).pipe(
-      map(res => {
-        if (res && res.id) {
-          this.saveLocalShift(res);
-          return res;
+
+  assign(id: number, employee: number | number[], confirm: { timeOff?: boolean; warnings?: boolean } = {}, note = '', shift?: Shift | null): Observable<Shift> {
+    const employeeIds = Array.isArray(employee) ? employee : [employee];
+
+    const assignPayload = {
+      schedule_id: id,
+      task: shift?.task ?? null,
+      task_name: shift?.name,
+      shift_date: shift?.shift_date,
+      start_time: shift?.start_time,
+      end_time: shift?.end_time,
+      employees: employeeIds,
+      notes: note
+    };
+
+    return this.http.post<ScheduleRecord[]>(`${API_URL}/schedules/assign-employees/`, assignPayload).pipe(
+      map(records => {
+        let currentShift = shift || this.latestShifts.find(s => s.id === id);
+        if (!currentShift) {
+          currentShift = {
+            id,
+            department: { id: 1, name: 'Operations' },
+            name: shift?.name || 'Shift',
+            shift_date: shift?.shift_date || '2026-11-09',
+            start_time: shift?.start_time || '09:00',
+            end_time: shift?.end_time || '17:00',
+            headcount: shift?.headcount || 1,
+            outside_hours: false,
+            open_count: 0,
+            assignments: []
+          };
         }
-        throw new Error('Invalid assign response');
-      }),
-      catchError(() => {
-        const list = this.getLocalShifts();
-        let s = list.find(x => x.id === id) || this.latestShifts.find(x => x.id === id);
-        if (!s) {
-          if (id === 1) {
-            s = {
-              id: 1, department: { id: 1, name: 'Operations' }, name: 'Morning Shift',
-              shift_date: '2026-11-09', start_time: '09:00', end_time: '13:00', headcount: 1,
-              outside_hours: false, open_count: 0,
-              assignments: [{ id: 1, employee_id: 3, name: 'Bob Smith', is_roster: false, is_minor: false, note: 'Opening register' }]
-            };
-          } else if (id === 2) {
-            s = {
-              id: 2, department: { id: 1, name: 'Operations' }, name: 'Mid Shift',
-              shift_date: '2026-11-11', start_time: '10:00', end_time: '16:00', headcount: 2,
-              outside_hours: false, open_count: 1,
-              assignments: [{ id: 2, employee_id: 1, name: 'Carol Williams', is_roster: false, is_minor: false, note: 'Supervisor' }]
-            };
-          } else {
-            s = {
-              id, department: { id: 1, name: 'Operations' }, name: 'Shift',
-              shift_date: '2026-11-11', start_time: '10:00', end_time: '16:00', headcount: 2,
-              outside_hours: false, open_count: 1, assignments: []
-            };
+        const updatedAssignments = [...(currentShift.assignments || [])];
+        for (const rec of records) {
+          if (rec.employee && !updatedAssignments.some(a => a.employee_id === rec.employee)) {
+            updatedAssignments.push({
+              id: rec.id,
+              employee_id: rec.employee,
+              name: rec.employee_name || `Employee #${rec.employee}`,
+              is_roster: false,
+              is_minor: false,
+              note: rec.notes || note
+            });
           }
         }
         const updatedShift: Shift = {
-          ...s,
-          assignments: [...(s.assignments || [])]
+          ...currentShift,
+          assignments: updatedAssignments,
+          open_count: Math.max(0, currentShift.headcount - updatedAssignments.length)
         };
-        const emp = this.latestEmployees.find(e => e.id === employee) || this.getLocalEmployees().find(e => e.id === employee);
-        const empName = emp?.name || (employee === 2 ? 'Alice Johnson' : employee === 3 ? 'Bob Smith' : employee === 1 ? 'Carol Williams' : `Employee ${employee}`);
-        if (!updatedShift.assignments.some(a => a.employee_id === employee)) {
-          const newAssign: ShiftPerson = {
-            id: Date.now(),
-            employee_id: employee,
-            name: empName,
-            is_roster: !!emp?.is_roster,
-            is_minor: !!emp?.is_minor,
-            note: note.trim()
-          };
-          updatedShift.assignments.push(newAssign);
-        }
-        updatedShift.open_count = Math.max(0, updatedShift.headcount - updatedShift.assignments.length);
-        this.saveLocalShift(updatedShift);
-        return of(updatedShift);
+        return updatedShift;
       })
     );
   }
@@ -635,51 +699,33 @@ export class ApiService {
     });
   }
   setNote(id: number, assignment: number, note: string): Observable<Shift> {
-    return this.http.post<Shift>(`${API_URL}/shifts/${id}/note/`, { assignment, note }).pipe(
-      map(res => {
-        if (res && res.id) {
-          this.saveLocalShift(res);
-          return res;
-        }
-        throw new Error('Invalid note response');
-      }),
-      catchError(() => {
-        const list = this.getLocalShifts();
-        let s = list.find(x => x.id === id) || this.latestShifts.find(x => x.id === id);
+    return this.http.post<ScheduleRecord>(`${API_URL}/schedules/set-note/`, { schedule_id: assignment, note }).pipe(
+      map(() => {
+        const s = this.latestShifts.find(x => x.id === id);
         if (s) {
           const updatedShift: Shift = {
             ...s,
             assignments: s.assignments.map(a => a.id === assignment ? { ...a, note } : a)
           };
-          this.saveLocalShift(updatedShift);
-          return of(updatedShift);
+          return updatedShift;
         }
-        return of({} as Shift);
+        return {} as Shift;
       })
     );
   }
   unassign(id: number, assignment: number): Observable<Shift> {
-    return this.http.post<Shift>(`${API_URL}/shifts/${id}/unassign/`, { assignment }).pipe(
-      map(res => {
-        if (res && res.id) {
-          this.saveLocalShift(res);
-          return res;
-        }
-        throw new Error('Invalid unassign response');
-      }),
-      catchError(() => {
-        const list = this.getLocalShifts();
-        let s = list.find(x => x.id === id) || this.latestShifts.find(x => x.id === id);
+    return this.http.post<ScheduleRecord>(`${API_URL}/schedules/unassign/`, { schedule_id: assignment }).pipe(
+      map(() => {
+        const s = this.latestShifts.find(x => x.id === id);
         if (s) {
           const updatedShift: Shift = {
             ...s,
             assignments: s.assignments.filter(a => a.id !== assignment && a.employee_id !== assignment)
           };
-          updatedShift.open_count = Math.max(0, updatedShift.headcount - updatedShift.assignments.length);
-          this.saveLocalShift(updatedShift);
-          return of(updatedShift);
+          updatedShift.open_count = Math.min(s.headcount, s.open_count + 1);
+          return updatedShift;
         }
-        return of({} as Shift);
+        return {} as Shift;
       })
     );
   }

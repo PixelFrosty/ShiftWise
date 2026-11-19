@@ -126,7 +126,7 @@ if os.environ.get('USE_SQLITE', 'false').lower() in ('true', '1') or 'test' in s
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': ':memory:',
+            'NAME': ':memory:' if 'test' in sys.argv else BASE_DIR / 'db.sqlite3',
         }
     }
 else:

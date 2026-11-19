@@ -7,6 +7,8 @@ from .models import (
     EmployeeProfile,
     Project,
     Schedule,
+    Skill,
+    Task,
     TimeOffRequest,
     User,
 )
@@ -26,15 +28,33 @@ class UserSerializer(serializers.ModelSerializer):
 
 class EmployeeProfileSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    department_name = serializers.CharField(source='department.name', read_only=True)
 
     class Meta:
         model = EmployeeProfile
-        fields = ['id', 'user', 'employee_name', 'company', 'department', 'role', 'position',
+        fields = ['id', 'user', 'employee_name', 'name', 'first_name', 'last_name', 'email',
+                  'company', 'department', 'department_name', 'role', 'position',
                   'productivity_score', 'pay_rate', 'created_at', 'modified_at']
         read_only_fields = ['created_at', 'modified_at']
 
     def get_employee_name(self, obj):
         return obj.user.get_full_name() or obj.user.email
+
+    def get_name(self, obj):
+        return obj.user.get_full_name() or obj.user.email
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        if instance.department:
+            ret['department'] = {'id': instance.department.id, 'name': instance.department.name}
+        ret['extra_departments'] = []
+        ret['is_roster'] = False
+        ret['is_minor'] = False
+        return ret
 
     def validate(self, attrs):
         if self.instance and self.instance.pk and 'company' in attrs:
@@ -49,13 +69,51 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class DepartmentSerializer(serializers.ModelSerializer):
+    employee_count = serializers.SerializerMethodField()
+    managers = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Department
+        fields = ['id', 'company', 'name', 'employee_count', 'managers', 'created_at', 'modified_at']
+        read_only_fields = ['created_at', 'modified_at']
+
+    def get_employee_count(self, obj):
+        return obj.employees.count()
+
+    def get_managers(self, obj):
+        return [
+            e.user.get_full_name() or e.user.email
+            for e in obj.employees.filter(role__in=[EmployeeProfile.Role.CEO, EmployeeProfile.Role.MANAGER]).select_related('user')
+        ]
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    skills_names = serializers.SerializerMethodField()
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'id', 'company', 'name', 'description', 'priority', 'preferred_window',
+            'is_recurring', 'required_people', 'duration_hours', 'skills', 'skills_names',
+            'project', 'project_name', 'department', 'department_name', 'employee'
+        ]
+
+    def get_skills_names(self, obj):
+        return [s.name for s in obj.skills.all()]
+
+
 class ScheduleSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
+    task_required_people = serializers.SerializerMethodField()
+    department = serializers.SerializerMethodField()
 
     class Meta:
         model = Schedule
         fields = ['id', 'task', 'task_name', 'employee', 'employee_name', 'shift_date', 'start_time',
-                  'end_time', 'status', 'notes', 'created_at', 'modified_at']
+                  'end_time', 'status', 'notes', 'task_required_people', 'department', 'created_at', 'modified_at']
         read_only_fields = ['created_at', 'modified_at']
         extra_kwargs = {
             'employee': {'required': True, 'allow_null': True},
@@ -65,6 +123,18 @@ class ScheduleSerializer(serializers.ModelSerializer):
         if not obj.employee:
             return None
         return obj.employee.user.get_full_name() or obj.employee.user.email
+
+    def get_task_required_people(self, obj):
+        if obj.task:
+            return obj.task.required_people
+        return None
+
+    def get_department(self, obj):
+        if obj.employee and obj.employee.department_id:
+            return obj.employee.department_id
+        if obj.task and obj.task.department_id:
+            return obj.task.department_id
+        return None
 
     def validate_task_name(self, value):
         if not value.strip():
@@ -93,6 +163,19 @@ class ScheduleSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f'Overlaps existing schedule #{clash.pk} for this employee '
                     f'({clash.start_time:%H:%M}-{clash.end_time:%H:%M} on {clash.shift_date}).')
+
+        task = current('task')
+        if task and employee and status != Schedule.Status.CANCELLED and day and start and end:
+            existing = Schedule.objects.filter(
+                task=task, shift_date=day, start_time=start, end_time=end, employee__isnull=False
+            ).exclude(status=Schedule.Status.CANCELLED)
+            if self.instance:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.count() >= task.required_people:
+                raise serializers.ValidationError(
+                    f'Cannot add more than {task.required_people} employee(s) to this schedule (headcount required by task).'
+                )
+
         return attrs
 
 

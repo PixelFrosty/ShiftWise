@@ -3,7 +3,7 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { ApiService, AutoScheduleResult, Employee, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate } from '../../core/api.service';
+import { ApiService, AutoScheduleResult, Employee, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate, TaskItem } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DepartmentRef, errorText } from '../../core/models';
 import { addDays, formatWeekRange, fromIso, mondayOf, toIso } from '../shared/week-utils';
@@ -86,19 +86,24 @@ export class WeeklyScheduleComponent implements OnDestroy {
 
   // staff only
   deptPeople = signal<Employee[]>([]);
+  tasks = signal<TaskItem[]>([]);
   templates = signal<ShiftTemplate[]>([]);
   toAdd: number | null = null;
+  toAddList: number[] = [];
   newNote = '';                       // optional note typed while adding a person
   noteEditId: number | null = null;   // the assignment whose note is being edited
   noteDraft = '';
   editing = false;
   edit = { name: '', start_time: '', end_time: '', headcount: 1 };
+  newShiftTaskId: number | null = null;
+  newShiftEmployees: number[] = [];
   newShift = { name: '', shift_date: '', start_time: '09:00', end_time: '13:00', headcount: 1 };
   newTemplate = { name: '', start_time: '09:00', end_time: '13:00', headcount: 1 };
   applyTemplateId: number | null = null;
   applyDays: boolean[] = [true, true, true, true, true, false, false];
   hoursForm = { open_time: '08:00', close_time: '18:00' };
   templateMessage = '';
+  shiftGenPrompt = false;
   /** Shown when a shift would sit outside the hours of operation; Yes sends it again with allow_outside_hours. */
   outsidePrompt: { text: string; action: 'create' | 'edit' } | null = null;
   confirmPrompt: { kind: 'time_off' | 'warning'; text: string } | null = null;
@@ -136,6 +141,37 @@ export class WeeklyScheduleComponent implements OnDestroy {
           this.departments = [...this.departments, ...all.filter(d => !own.has(d.id)).map(d => ({ id: d.id, name: d.name }))];
         });
       }
+    } else {
+      this.auth.loadMe().subscribe({
+        next: me => {
+          const p = me?.profile;
+          if (p) {
+            this.managedIds = new Set(p.managed_departments.map(d => d.id));
+            const mine = p.can_edit_schedule ? p.managed_departments : [p.department, ...(p.extra_departments ?? [])];
+            this.departments = mine.length ? mine : [p.department];
+            this.deptId = this.departments.find(d => d.id === p.department.id)?.id ?? this.departments[0]?.id ?? null;
+            if (p.can_edit_schedule) {
+              this.api.departments().subscribe(all => {
+                const own = new Set(this.departments.map(d => d.id));
+                this.departments = [...this.departments, ...all.filter(d => !own.has(d.id)).map(d => ({ id: d.id, name: d.name }))];
+              });
+            }
+            if (this.canEdit) { this.loadStaffData(); }
+            this.reload();
+          }
+        },
+        error: () => {
+          this.api.departments().subscribe(all => {
+            if (all.length > 0) {
+              this.departments = all.map(d => ({ id: d.id, name: d.name }));
+              if (this.deptId === null) { this.deptId = all[0].id; }
+              this.managedIds.add(all[0].id);
+              this.loadStaffData();
+              this.reload();
+            }
+          });
+        }
+      });
     }
     if (this.canEdit) { this.loadStaffData(); }
     this.sub = this.route.paramMap.subscribe(params => {
@@ -341,8 +377,12 @@ export class WeeklyScheduleComponent implements OnDestroy {
     });
   }
 
+  openShiftGeneration(): void { this.shiftGenPrompt = true; }
+  closeShiftGeneration(): void { this.shiftGenPrompt = false; }
+
   private loadStaffData(): void {
     this.api.employees().subscribe(list => this.deptPeople.set(list));
+    this.api.tasks(this.deptId).subscribe(list => this.tasks.set(list));
     this.api.templates().subscribe(list => { this.templates.set(list); this.applyTemplateId = this.applyTemplateId ?? list[0]?.id ?? null; });
   }
 
@@ -370,6 +410,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.requestDone = '';
     this.editing = false;
     this.toAdd = null;
+    this.toAddList = [];
     this.newNote = '';
     this.noteEditId = null;
     if (!this.deptPeople().length) {
@@ -377,7 +418,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
     }
   }
 
-  closePanel(): void { this.outsidePrompt = null; this.panel = null; this.activeShiftId = null; this.panelError = ''; this.requestMode = null; this.confirmPrompt = null; this.confirmed = { timeOff: false, warnings: false }; }
+  closePanel(): void { this.outsidePrompt = null; this.panel = null; this.activeShiftId = null; this.panelError = ''; this.requestMode = null; this.confirmPrompt = null; this.confirmed = { timeOff: false, warnings: false }; this.toAddList = []; }
 
   private fail(err: unknown): void { this.panelError = errorText(err); this.busy = false; }
 
@@ -393,10 +434,11 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.busy = true;
     this.panelError = '';
     const employeeId = Number(this.toAdd);
-    this.api.assign(shift.id, employeeId, { timeOff: this.confirmed.timeOff, warnings: this.confirmed.warnings }, this.newNote).subscribe({
+    this.api.assign(shift.id, employeeId, { timeOff: this.confirmed.timeOff, warnings: this.confirmed.warnings }, this.newNote, shift).subscribe({
       next: updated => {
         this.applyUpdated(updated);
         this.toAdd = null;
+        this.toAddList = [];
         this.newNote = '';
         this.confirmPrompt = null;
         this.confirmed = { timeOff: false, warnings: false };
@@ -412,6 +454,39 @@ export class WeeklyScheduleComponent implements OnDestroy {
         } else { this.confirmed = { timeOff: false, warnings: false }; this.fail(err); }
       }
     });
+  }
+
+  addMultiplePeople(): void {
+    const shift = this.activeShift;
+    if (!shift || !this.toAddList.length || this.busy) { return; }
+    this.busy = true;
+    this.panelError = '';
+    const employeeIds = [...this.toAddList];
+    this.api.assign(shift.id, employeeIds, { timeOff: this.confirmed.timeOff, warnings: this.confirmed.warnings }, this.newNote, shift).subscribe({
+      next: updated => {
+        this.applyUpdated(updated);
+        this.toAddList = [];
+        this.toAdd = null;
+        this.newNote = '';
+        this.closePanel();
+        this.reload();
+      },
+      error: err => {
+        this.fail(err);
+      }
+    });
+  }
+
+  toggleToAddList(empId: number): void {
+    const shift = this.activeShift;
+    const maxAddable = shift ? shift.open_count : 0;
+    if (this.toAddList.includes(empId)) {
+      this.toAddList = this.toAddList.filter(id => id !== empId);
+    } else {
+      if (this.toAddList.length < maxAddable) {
+        this.toAddList = [...this.toAddList, empId];
+      }
+    }
   }
 
   onEmployeeAdded(event: any): void {
@@ -501,7 +576,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
     if (!s || this.busy) { return; }
     this.busy = true;
     const shiftId = s.id;
-    this.api.deleteShift(shiftId).subscribe({
+    this.api.deleteShift(shiftId, s.schedule_ids).subscribe({
       next: () => {
         this.shifts.update(list => list.filter(item => item.id !== shiftId));
         this.weekAll.update(list => list.filter(item => item.id !== shiftId));
@@ -517,14 +592,64 @@ export class WeeklyScheduleComponent implements OnDestroy {
   openAdd(iso?: string): void {
     this.panel = 'add';
     this.panelError = '';
-    this.newShift = { ...this.newShift, shift_date: iso ?? toIso(this.monday), name: '' };
+    this.newShiftTaskId = null;
+    this.newShiftEmployees = [];
+    this.newShift = { ...this.newShift, shift_date: iso ?? toIso(this.monday), name: '', headcount: 1 };
+    if (!this.tasks().length) {
+      this.api.tasks(this.deptId).subscribe(list => this.tasks.set(list));
+    }
+    if (!this.deptPeople().length) {
+      this.loadStaffData();
+    }
+  }
+
+  onNewShiftTaskChange(taskId: number | null): void {
+    this.newShiftTaskId = taskId;
+    if (taskId) {
+      const task = this.tasks().find(t => t.id === taskId);
+      if (task) {
+        this.newShift.name = task.name;
+        this.newShift.headcount = task.required_people;
+        if (this.newShiftEmployees.length > task.required_people) {
+          this.newShiftEmployees = this.newShiftEmployees.slice(0, task.required_people);
+        }
+      }
+    }
+  }
+
+  isEmployeeSelectedForNewShift(empId: number): boolean {
+    return this.newShiftEmployees.includes(empId);
+  }
+
+  toggleEmployeeForNewShift(empId: number): void {
+    if (this.newShiftEmployees.includes(empId)) {
+      this.newShiftEmployees = this.newShiftEmployees.filter(id => id !== empId);
+    } else {
+      if (this.newShiftEmployees.length < this.newShift.headcount) {
+        this.newShiftEmployees = [...this.newShiftEmployees, empId];
+      }
+    }
   }
 
   createShift(allowOutside = false): void {
     if (this.deptId === null || this.busy) { return; }
     this.busy = true;
-    this.api.createShift({ ...this.newShift, headcount: Number(this.newShift.headcount), department: this.deptId, ...(allowOutside ? { allow_outside_hours: true } : {}) }).subscribe({
-      next: () => { this.busy = false; this.closePanel(); this.reload(); },
+    const payload = {
+      ...this.newShift,
+      task: this.newShiftTaskId,
+      employees: [...this.newShiftEmployees],
+      headcount: Number(this.newShift.headcount),
+      department: this.deptId,
+      ...(allowOutside ? { allow_outside_hours: true } : {})
+    };
+    this.api.createShift(payload).subscribe({
+      next: () => {
+        this.busy = false;
+        this.newShiftEmployees = [];
+        this.newShiftTaskId = null;
+        this.closePanel();
+        this.reload();
+      },
       error: (err: HttpErrorResponse) => {
         if (err.status === 409 && err.error?.code === 'outside_hours') { this.busy = false; this.outsidePrompt = { text: err.error.detail, action: 'create' }; }
         else { this.fail(err); }
