@@ -39,8 +39,7 @@ services:
         ports:
             - "4200:4200"
         volumes:
-            - ./frontend:/app
-            - /app/node_modules
+            - ./frontend:/app:Z
         networks:
             - frontend_net
         depends_on:
