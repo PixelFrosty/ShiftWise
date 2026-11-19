@@ -400,7 +400,6 @@ export class WeeklyScheduleComponent implements OnDestroy {
         this.newNote = '';
         this.confirmPrompt = null;
         this.confirmed = { timeOff: false, warnings: false };
-        this.closePanel();
         this.reload();
       },
       error: (err: HttpErrorResponse) => {
