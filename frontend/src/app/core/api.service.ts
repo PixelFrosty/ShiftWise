@@ -160,6 +160,24 @@ export interface PostReview extends Publication {
 
 export interface AutoScheduleResult { created: number; open_before: number; open_after: number; notes: string[]; }
 
+export interface GenerateShiftsPayload {
+  company_id: number;
+  week_start: string;
+  department_id?: number | null;
+  clear_existing?: boolean;
+}
+
+export interface GenerateShiftsResult {
+  company_id: number;
+  week_start: string;
+  week_end: string;
+  total_shifts_generated: number;
+  pre_assigned_shifts: number;
+  unassigned_shifts: number;
+  days_with_shifts: string[];
+  warnings: string[];
+}
+
 export interface ShiftTemplate { id: number; name: string; start_time: string; end_time: string; headcount: number; created_by: string | null; }
 
 export interface ScheduleBrief { id: number; shift_date: string; start_time: string; end_time: string; label: string; department: string; }
@@ -464,10 +482,12 @@ export class ApiService {
       const deptId = first.department ?? (typeof task?.department === 'number' ? task.department : deptFallbackId ?? 1);
       const deptName = deptId === 2 ? 'Engineering' : 'Operations';
 
+      const shiftName = (first.task_name && first.task_name !== 'Shift' ? first.task_name : (task?.name || first.task_name || 'Shift')).trim();
+
       shifts.push({
         id: first.id,
         department: { id: deptId, name: deptName },
-        name: first.task_name || (task ? task.name : 'Shift'),
+        name: shiftName,
         shift_date: first.shift_date,
         start_time: start,
         end_time: end,
@@ -735,6 +755,9 @@ export class ApiService {
   deleteTemplate(id: number): Observable<void> { return this.http.delete<void>(`${API_URL}/shift-templates/${id}/`); }
   applyTemplate(template: number, department: number, dates: string[]): Observable<{ created: number; skipped: number }> {
     return this.http.post<{ created: number; skipped: number }>(`${API_URL}/shifts/apply-template/`, { template, department, dates });
+  }
+  generateShifts(payload: GenerateShiftsPayload): Observable<GenerateShiftsResult> {
+    return this.http.post<GenerateShiftsResult>(`${API_URL}/schedules/generate/`, payload);
   }
   /** People in one of my departments (default: my home department) who can answer shift requests. */
   coworkers(department?: number): Observable<{ id: number; name: string }[]> {

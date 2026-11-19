@@ -1364,6 +1364,134 @@ class ShiftGeneratorTests(APITestCase):
         self.assertIsNone(full_day_shift.employee)  # Left unassigned!
         self.assertTrue(any('do not cover shift' in w for w in res['warnings']))
 
+    def test_flexible_task_concurrency_leveling_between_shifts(self):
+        # Anchor 1: Morning task 09:00 - 11:00 (BEGINNING_OF_DAY)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Morning Opening',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # Anchor 2: Evening task 15:00 - 17:00 (END_OF_DAY)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Evening Closing',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.END_OF_DAY
+        )
+        # Flexible task: 2 hours. Should fill the valley right at 11:00 - 13:00 with no pause
+        t_flex = Task.objects.create(
+            company=self.company, project=self.project, name='Midday Restock',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+
+        # Restrict to only Monday by zeroing other days
+        self.hours.tuesday_start = None
+        self.hours.tuesday_end = None
+        self.hours.wednesday_start = None
+        self.hours.wednesday_end = None
+        self.hours.thursday_start = None
+        self.hours.thursday_end = None
+        self.hours.friday_start = None
+        self.hours.friday_end = None
+        self.hours.save()
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        s_flex = Schedule.objects.get(task=t_flex)
+        self.assertEqual(s_flex.start_time, datetime.time(11, 0))
+        self.assertEqual(s_flex.end_time, datetime.time(13, 0))
+
+    def test_flexible_task_with_preassigned_employee_afternoon_availability(self):
+        # Alice is only available in the afternoon (13:00 - 17:00) on Monday
+        AvailabilitySlot.objects.create(
+            employee=self.employee,
+            day_of_week=0,  # Monday
+            start_time=datetime.time(13, 0),
+            end_time=datetime.time(17, 0)
+        )
+        # Only Monday open
+        self.hours.tuesday_start = None
+        self.hours.tuesday_end = None
+        self.hours.wednesday_start = None
+        self.hours.wednesday_end = None
+        self.hours.thursday_start = None
+        self.hours.thursday_end = None
+        self.hours.friday_start = None
+        self.hours.friday_end = None
+        self.hours.save()
+
+        # Flexible task of 3 hours pre-assigned to Alice
+        t_flex = Task.objects.create(
+            company=self.company, project=self.project, name='Afternoon Audit',
+            is_recurring=False, required_people=1, duration_hours=3.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        s_flex = Schedule.objects.get(task=t_flex)
+        self.assertEqual(s_flex.employee, self.employee)
+        self.assertEqual(s_flex.start_time, datetime.time(13, 0))
+        self.assertEqual(s_flex.end_time, datetime.time(16, 0))
+        self.assertEqual(len(res['warnings']), 0)
+
+    def test_multi_person_task_at_same_time(self):
+        t_multi = Task.objects.create(
+            company=self.company, project=self.project, name='Group Floor Reset',
+            is_recurring=False, required_people=3, duration_hours=3.0,
+            preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+
+        # Restrict to Monday
+        self.hours.tuesday_start = None
+        self.hours.tuesday_end = None
+        self.hours.wednesday_start = None
+        self.hours.wednesday_end = None
+        self.hours.thursday_start = None
+        self.hours.thursday_end = None
+        self.hours.friday_start = None
+        self.hours.friday_end = None
+        self.hours.save()
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        shifts = list(Schedule.objects.filter(task=t_multi).order_by('id'))
+        self.assertEqual(len(shifts), 3)
+        # All 3 positions work at the exact same time
+        self.assertEqual(shifts[0].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[0].end_time, datetime.time(12, 0))
+        self.assertEqual(shifts[1].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[1].end_time, datetime.time(12, 0))
+        self.assertEqual(shifts[2].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[2].end_time, datetime.time(12, 0))
+
+    def test_inter_day_load_balancing_accounts_for_person_hours(self):
+        # Task 1: 4 hours, 2 people -> 8 person-hours.
+        # Placed on Monday (first open day with 0 hours)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Two-Person Setup',
+            is_recurring=False, required_people=2, duration_hours=4.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # Task 2: 4 hours, 1 person.
+        # Candidate days: Monday now has 8 scheduled person-hours, Tuesday has 0.
+        # Should pick Tuesday!
+        t2 = Task.objects.create(
+            company=self.company, project=self.project, name='Solo Followup',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        t2_shift = Schedule.objects.get(task=t2)
+        # Week start is Nov 16 (Monday). Tuesday is Nov 17.
+        self.assertEqual(t2_shift.shift_date, datetime.date(2026, 11, 17))
+
 
 class ScheduleMultipleEmployeesTests(ScheduleApiBase):
     def setUp(self):

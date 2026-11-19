@@ -11,6 +11,8 @@ from .models import (
     Schedule,
     TimeOffRequest,
     User,
+    Skill,
+    Task
 )
 
 
@@ -127,3 +129,5 @@ admin.site.register(CompatibilityScore)
 admin.site.register(AvailabilitySlot)
 admin.site.register(TimeOffRequest)
 admin.site.register(Project)
+admin.site.register(Skill)
+admin.site.register(Task)

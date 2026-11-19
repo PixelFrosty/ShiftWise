@@ -132,6 +132,8 @@ class ScheduleSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
+        if not ret.get('task_name') and instance.task:
+            ret['task_name'] = instance.task.name
         if ret.get('department') is None:
             if instance.department_id:
                 ret['department'] = instance.department_id

@@ -3,7 +3,7 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { ApiService, AutoScheduleResult, Employee, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate, TaskItem } from '../../core/api.service';
+import { ApiService, AutoScheduleResult, Employee, GenerateShiftsPayload, GenerateShiftsResult, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate, TaskItem } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DepartmentRef, errorText } from '../../core/models';
 import { addDays, formatWeekRange, fromIso, mondayOf, toIso } from '../shared/week-utils';
@@ -104,6 +104,10 @@ export class WeeklyScheduleComponent implements OnDestroy {
   hoursForm = { open_time: '08:00', close_time: '18:00' };
   templateMessage = '';
   shiftGenPrompt = false;
+  shiftGenBusy = false;
+  shiftGenError = '';
+  shiftGenResult: GenerateShiftsResult | null = null;
+  shiftGenClearExisting = false;
   /** Shown when a shift would sit outside the hours of operation; Yes sends it again with allow_outside_hours. */
   outsidePrompt: { text: string; action: 'create' | 'edit' } | null = null;
   confirmPrompt: { kind: 'time_off' | 'warning'; text: string } | null = null;
@@ -378,8 +382,53 @@ export class WeeklyScheduleComponent implements OnDestroy {
     });
   }
 
-  openShiftGeneration(): void { this.shiftGenPrompt = true; }
-  closeShiftGeneration(): void { this.shiftGenPrompt = false; }
+  openShiftGeneration(): void {
+    this.shiftGenPrompt = true;
+    this.shiftGenBusy = false;
+    this.shiftGenError = '';
+    this.shiftGenResult = null;
+    this.shiftGenClearExisting = false;
+  }
+
+  closeShiftGeneration(): void {
+    if (this.shiftGenBusy) { return; }
+    this.shiftGenPrompt = false;
+    this.shiftGenBusy = false;
+    this.shiftGenError = '';
+    this.shiftGenResult = null;
+  }
+
+  generateWeeklyShifts(): void {
+    if (this.shiftGenBusy) { return; }
+    this.shiftGenBusy = true;
+    this.shiftGenError = '';
+    this.shiftGenResult = null;
+
+    const companyId = this.auth.me()?.profile?.company?.id ?? 1;
+    const payload: GenerateShiftsPayload = {
+      company_id: companyId,
+      week_start: toIso(this.monday),
+      department_id: this.deptId,
+      clear_existing: this.shiftGenClearExisting,
+    };
+
+    const startTime = Date.now();
+    this.api.generateShifts(payload).subscribe({
+      next: res => {
+        const elapsed = Date.now() - startTime;
+        const delay = Math.max(0, 800 - elapsed);
+        setTimeout(() => {
+          this.shiftGenBusy = false;
+          this.shiftGenResult = res;
+          this.reload();
+        }, delay);
+      },
+      error: err => {
+        this.shiftGenBusy = false;
+        this.shiftGenError = errorText(err) || 'Failed to generate shifts. Please check your tasks and hours.';
+      }
+    });
+  }
 
   private loadStaffData(): void {
     this.api.employees().subscribe(list => this.deptPeople.set(list));

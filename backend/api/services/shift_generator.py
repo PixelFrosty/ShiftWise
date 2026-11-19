@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 
 from ..models import (
     AvailabilitySlot,
@@ -71,7 +72,7 @@ def calculate_slot_times(
             start_min = max(open_min, close_min - dur_min)
         return minutes_to_time(start_min), minutes_to_time(end_min)
 
-    # Default / FLEXIBLE: starts at opening of day
+    # Default / FLEXIBLE fallback: starts at opening of day
     start_min = open_min
     end_min = min(close_min, open_min + dur_min)
     return minutes_to_time(start_min), minutes_to_time(end_min)
@@ -84,6 +85,7 @@ class ShiftGeneratorService:
     - Active projects and tasks
     - Task priority, duration, preferred window, and headcount
     - Pre-assigned employees and their availability / approved time-off
+    - Concurrency leveling for flexible shifts and load balancing across the week
     """
 
     PRIORITY_WEIGHTS = {
@@ -113,9 +115,17 @@ class ShiftGeneratorService:
         """Returns a dict mapping day_of_week (0=Monday..6=Sunday) to (start_time, end_time)."""
         ch = CompanyHours.objects.filter(company=self.company).first()
         if not ch:
-            raise ValidationError(
-                f"No CompanyHours configured for company '{self.company.name}'. Cannot generate shifts."
-            )
+            default_start = datetime.time(8, 0)
+            default_end = datetime.time(18, 0)
+            return {
+                0: (default_start, default_end),
+                1: (default_start, default_end),
+                2: (default_start, default_end),
+                3: (default_start, default_end),
+                4: (default_start, default_end),
+                5: (None, None),
+                6: (None, None),
+            }
 
         return {
             0: (ch.monday_start, ch.monday_end),
@@ -126,6 +136,30 @@ class ShiftGeneratorService:
             5: (ch.saturday_start, ch.saturday_end),
             6: (ch.sunday_start, ch.sunday_end),
         }
+
+    def _seed_existing_schedules(self, days: List[Dict[str, Any]]):
+        """Populates initial load and concurrency from existing non-cancelled schedules."""
+        qs = Schedule.objects.filter(
+            shift_date__gte=self.week_start,
+            shift_date__lte=self.week_end,
+        ).exclude(status=Schedule.Status.CANCELLED)
+
+        if self.department:
+            qs = qs.filter(Q(task__department=self.department) | Q(department=self.department))
+        else:
+            qs = qs.filter(Q(task__company=self.company) | Q(company=self.company))
+
+        days_by_date = {d["date"]: d for d in days if d["is_open"]}
+        for s in qs:
+            day = days_by_date.get(s.shift_date)
+            if not day:
+                continue
+            s_min = time_to_minutes(s.start_time)
+            e_min = time_to_minutes(s.end_time)
+            dur_h = max(0.0, (e_min - s_min) / 60.0)
+            day["scheduled_hours"] += dur_h
+            for m in range(max(0, s_min), min(1440, e_min)):
+                day["concurrency"][m] += 1
 
     def _build_days_meta(self) -> List[Dict[str, Any]]:
         """Builds metadata for each of the 7 days of the target week."""
@@ -138,12 +172,14 @@ class ShiftGeneratorService:
 
             is_open = False
             duration_hours = 0.0
+            open_min = 0
+            close_min = 0
             if start_t is not None and end_t is not None:
-                start_min = time_to_minutes(start_t)
-                end_min = time_to_minutes(end_t)
-                if end_min > start_min:
+                open_min = time_to_minutes(start_t)
+                close_min = time_to_minutes(end_t)
+                if close_min > open_min:
                     is_open = True
-                    duration_hours = (end_min - start_min) / 60.0
+                    duration_hours = (close_min - open_min) / 60.0
 
             days.append(
                 {
@@ -152,10 +188,17 @@ class ShiftGeneratorService:
                     "is_open": is_open,
                     "open_time": start_t,
                     "close_time": end_t,
+                    "open_min": open_min,
+                    "close_min": close_min,
                     "duration_hours": duration_hours,
                     "scheduled_hours": 0.0,
+                    "concurrency": [0] * 1440,
                 }
             )
+
+        if not self.clear_existing:
+            self._seed_existing_schedules(days)
+
         return days
 
     def _is_employee_available(
@@ -199,6 +242,115 @@ class ShiftGeneratorService:
 
         return True, None
 
+    def _find_best_slot_times(
+        self,
+        day: Dict[str, Any],
+        duration_hours: float,
+        window: str,
+        employee: Optional[EmployeeProfile] = None,
+    ) -> Tuple[datetime.time, datetime.time, Optional[EmployeeProfile], Optional[str]]:
+        """
+        Determines the start and end times for a shift on a given day.
+        For fixed windows (BEGINNING_OF_DAY, MID_DAY, END_OF_DAY, OPEN_TO_CLOSE),
+        times are anchored.
+        For FLEXIBLE, concurrency leveling finds the window that minimizes concurrent staff
+        (leveling headcount throughout the day) and respects employee availability if pre-assigned.
+
+        Returns (start_time, end_time, assigned_employee, warning_message).
+        """
+        open_time = day["open_time"]
+        close_time = day["close_time"]
+        open_min = day["open_min"]
+        close_min = day["close_min"]
+        day_span_min = close_min - open_min
+
+        dur_min = int(duration_hours * 60)
+        dur_min = min(dur_min, day_span_min)
+
+        if window != Task.PreferredWindow.FLEXIBLE:
+            start_t, end_t = calculate_slot_times(open_time, close_time, duration_hours, window)
+            assigned_emp = None
+            warn = None
+            if employee:
+                is_avail, reason = self._is_employee_available(employee, day["date"], start_t, end_t)
+                if is_avail:
+                    assigned_emp = employee
+                else:
+                    warn = reason
+            return start_t, end_t, assigned_emp, warn
+
+        # FLEXIBLE WINDOW: Concurrency leveling
+        if dur_min <= 0 or day_span_min <= 0:
+            return open_time, open_time, None, None
+
+        max_start = close_min - dur_min
+        if max_start < open_min:
+            return open_time, close_time, None, None
+
+        # Candidate start times spaced every 15 minutes, plus max_start
+        candidates = list(range(open_min, max_start + 1, 15))
+        if max_start not in candidates:
+            candidates.append(max_start)
+        candidates.sort()
+
+        assigned_emp = None
+        emp_warning = None
+
+        if employee:
+            # Check leave first
+            on_leave = TimeOffRequest.objects.filter(
+                employee=employee,
+                status=TimeOffRequest.Status.APPROVED,
+                start_date__lte=day["date"],
+                end_date__gte=day["date"],
+            ).exists()
+
+            if on_leave:
+                emp_warning = f"Employee {employee} has approved time-off on {day['date']}."
+                valid_candidates = candidates
+            else:
+                all_emp_slots = AvailabilitySlot.objects.filter(employee=employee)
+                if all_emp_slots.exists():
+                    dow = day["date"].weekday()
+                    dow_slots = all_emp_slots.filter(day_of_week=dow)
+                    if not dow_slots.exists():
+                        emp_warning = f"Employee {employee} has no availability slot on {day['date'].strftime('%A')}."
+                        valid_candidates = candidates
+                    else:
+                        matching = []
+                        for s in candidates:
+                            st = minutes_to_time(s)
+                            et = minutes_to_time(s + dur_min)
+                            if dow_slots.filter(start_time__lte=st, end_time__gte=et).exists():
+                                matching.append(s)
+
+                        if matching:
+                            assigned_emp = employee
+                            valid_candidates = matching
+                        else:
+                            slot_ranges = ", ".join(f"{sl.start_time:%H:%M}-{sl.end_time:%H:%M}" for sl in dow_slots)
+                            emp_warning = f"Employee {employee} available hours on {day['date'].strftime('%A')} ({slot_ranges}) do not cover shift duration ({duration_hours:.1f}h)."
+                            valid_candidates = candidates
+                else:
+                    assigned_emp = employee
+                    valid_candidates = candidates
+        else:
+            valid_candidates = candidates
+
+        # Leveling: Find candidate with lowest peak concurrency, then lowest average concurrency, then earliest start
+        def score(s: int) -> Tuple[int, float, int]:
+            e = s + dur_min
+            segment = day["concurrency"][s:e]
+            max_c = max(segment) if segment else 0
+            avg_c = (sum(segment) / float(dur_min)) if dur_min > 0 else 0.0
+            return (max_c, avg_c, s)
+
+        best_s = min(valid_candidates, key=score)
+        start_t = minutes_to_time(best_s)
+        end_t = minutes_to_time(best_s + dur_min)
+
+        return start_t, end_t, assigned_emp, emp_warning
+
     def _task_priority_key(self, task: Task) -> Tuple[int, int, float]:
         """Sorting key to prioritize high-priority projects and tasks first."""
         proj_prio = self.PRIORITY_WEIGHTS.get(
@@ -214,29 +366,21 @@ class ShiftGeneratorService:
         shift_date: datetime.date,
         start_time: datetime.time,
         end_time: datetime.time,
+        assigned_emp: Optional[EmployeeProfile] = None,
     ):
         """
         Creates the required headcount Schedule slots for a task block.
-        If task has a pre-assigned employee, their exact hours and time-off are validated.
-        If unavailable, Slot 1 is left unassigned (None) with a warning.
+        All headcount positions work at the exact same time window.
+        Slot 1 gets assigned_emp (if available).
+        Slots 2..N are created unassigned.
         """
         headcount = max(1, task.required_people)
-        assigned_emp = None
 
-        if task.employee:
-            is_avail, reason = self._is_employee_available(
-                task.employee, shift_date, start_time, end_time
-            )
-            if is_avail:
-                assigned_emp = task.employee
-            else:
-                self.warnings.append(
-                    f"Task '{task.name}' on {shift_date} ({start_time:%H:%M}-{end_time:%H:%M}): {reason} Shift created unassigned for smart scheduler."
-                )
-
-        # Slot 1: pre-assigned employee if available, otherwise unassigned
+        # Slot 1
         self.schedules_to_create.append(
             Schedule(
+                company=task.company,
+                department=task.department,
                 task=task,
                 task_name=task.name,
                 shift_date=shift_date,
@@ -252,6 +396,8 @@ class ShiftGeneratorService:
         for pos in range(2, headcount + 1):
             self.schedules_to_create.append(
                 Schedule(
+                    company=task.company,
+                    department=task.department,
                     task=task,
                     task_name=task.name,
                     shift_date=shift_date,
@@ -261,6 +407,83 @@ class ShiftGeneratorService:
                     status=Schedule.Status.SCHEDULED,
                     notes=f"Auto-generated for {task.name} (Position {pos})",
                 )
+            )
+
+    def _record_day_usage(
+        self,
+        day: Dict[str, Any],
+        start_time: datetime.time,
+        end_time: datetime.time,
+        headcount: int,
+    ):
+        """Records concurrency and scheduled person-hours on a day's timeline."""
+        s_min = time_to_minutes(start_time)
+        e_min = time_to_minutes(end_time)
+        dur_h = max(0.0, (e_min - s_min) / 60.0)
+
+        for m in range(max(0, s_min), min(1440, e_min)):
+            day["concurrency"][m] += headcount
+
+        day["scheduled_hours"] += dur_h * headcount
+
+    def _schedule_non_recurring_task(self, task: Task, open_days: List[Dict[str, Any]]):
+        """Schedules a non-recurring task across open days, balancing load and leveling concurrency."""
+        headcount = max(1, task.required_people)
+        remaining_dur = float(task.duration_hours)
+
+        candidate_days = open_days.copy()
+        if task.employee:
+            available_days = []
+            for d in candidate_days:
+                chunk = min(remaining_dur, d["duration_hours"])
+                start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
+                    d, chunk, task.preferred_window, task.employee
+                )
+                if assigned_emp is not None:
+                    available_days.append((d["scheduled_hours"], d))
+                else:
+                    self.warnings.append(
+                        f"Task '{task.name}' pre-assigned to {task.employee}: {warn}"
+                    )
+
+            if available_days:
+                available_days.sort(key=lambda x: x[0])
+                candidate_days = [item[1] for item in available_days]
+            else:
+                self.warnings.append(
+                    f"Task '{task.name}' pre-assigned to {task.employee}: employee has no open days with matching availability during the week. Shifts will be created unassigned."
+                )
+                candidate_days.sort(key=lambda d: d["scheduled_hours"])
+        else:
+            candidate_days.sort(key=lambda d: d["scheduled_hours"])
+
+        day_index = 0
+        while remaining_dur > 0 and day_index < len(candidate_days):
+            curr_day = candidate_days[day_index]
+            day_capacity = curr_day["duration_hours"]
+
+            if task.preferred_window == Task.PreferredWindow.OPEN_TO_CLOSE:
+                chunk_dur = day_capacity
+                remaining_dur = 0.0
+            else:
+                chunk_dur = min(remaining_dur, day_capacity)
+                remaining_dur -= chunk_dur
+
+            start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
+                curr_day, chunk_dur, task.preferred_window, task.employee
+            )
+            if warn and task.employee and assigned_emp is None:
+                self.warnings.append(
+                    f"Task '{task.name}' on {curr_day['date']} ({start_t:%H:%M}-{end_t:%H:%M}): {warn} Shift created unassigned for smart scheduler."
+                )
+
+            self._create_schedule_slots(task, curr_day["date"], start_t, end_t, assigned_emp)
+            self._record_day_usage(curr_day, start_t, end_t, headcount)
+            day_index += 1
+
+        if remaining_dur > 0:
+            self.warnings.append(
+                f"Task '{task.name}' could not be fully scheduled ({remaining_dur:.1f} hours unscheduled due to open hours capacity)."
             )
 
     def generate(self) -> Dict[str, Any]:
@@ -278,83 +501,57 @@ class ShiftGeneratorService:
         if self.department:
             tasks_qs = tasks_qs.filter(department=self.department)
 
-        # Exclude tasks linked to inactive projects
         tasks = [t for t in tasks_qs.select_related("project", "department", "employee") if not t.project or t.project.is_active]
 
-        # Separate recurring vs. non-recurring
-        recurring_tasks = [t for t in tasks if t.is_recurring]
-        non_recurring_tasks = [t for t in tasks if not t.is_recurring]
+        # Partition tasks:
+        # Phase 1: Fixed-window tasks (anchors)
+        # Phase 2: Flexible-window tasks (concurrency leveling into valleys)
+        fixed_recurring = [t for t in tasks if t.is_recurring and t.preferred_window != Task.PreferredWindow.FLEXIBLE]
+        fixed_non_recurring = [t for t in tasks if not t.is_recurring and t.preferred_window != Task.PreferredWindow.FLEXIBLE]
+        flexible_recurring = [t for t in tasks if t.is_recurring and t.preferred_window == Task.PreferredWindow.FLEXIBLE]
+        flexible_non_recurring = [t for t in tasks if not t.is_recurring and t.preferred_window == Task.PreferredWindow.FLEXIBLE]
 
         # Sort non-recurring tasks by priority descending
-        non_recurring_tasks.sort(key=self._task_priority_key, reverse=True)
+        fixed_non_recurring.sort(key=self._task_priority_key, reverse=True)
+        flexible_non_recurring.sort(key=self._task_priority_key, reverse=True)
 
-        # 2. Process Recurring Tasks: repeat on EVERY open day
-        for task in recurring_tasks:
+        # Phase 1A: Fixed Recurring Tasks
+        for task in fixed_recurring:
+            headcount = max(1, task.required_people)
             for day in open_days:
                 dur = day["duration_hours"] if task.preferred_window == Task.PreferredWindow.OPEN_TO_CLOSE else float(task.duration_hours)
-                start_t, end_t = calculate_slot_times(
-                    day["open_time"], day["close_time"], dur, task.preferred_window
+                start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
+                    day, dur, task.preferred_window, task.employee
                 )
-                self._create_schedule_slots(task, day["date"], start_t, end_t)
-                day["scheduled_hours"] += dur
-
-        # 3. Process Non-Recurring Tasks (with multi-day splitting and employee availability checking)
-        for task in non_recurring_tasks:
-            remaining_dur = float(task.duration_hours)
-
-            # Determine candidate open days
-            candidate_days = open_days.copy()
-            if task.employee:
-                # Filter/sort open days by employee availability for the required window
-                available_days = []
-                for d in candidate_days:
-                    chunk = min(remaining_dur, d["duration_hours"])
-                    st, et = calculate_slot_times(
-                        d["open_time"], d["close_time"], chunk, task.preferred_window
-                    )
-                    is_avail, reason = self._is_employee_available(task.employee, d["date"], st, et)
-                    if is_avail:
-                        available_days.append((d["scheduled_hours"], d))
-                    else:
-                        self.warnings.append(
-                            f"Task '{task.name}' pre-assigned to {task.employee}: {reason}"
-                        )
-
-                if available_days:
-                    # Sort by least scheduled day among days where employee is genuinely available
-                    available_days.sort(key=lambda x: x[0])
-                    candidate_days = [item[1] for item in available_days]
-                else:
+                if warn and task.employee and assigned_emp is None:
                     self.warnings.append(
-                        f"Task '{task.name}' pre-assigned to {task.employee}: employee has no open days with matching availability during the week. Shifts will be created unassigned."
+                        f"Task '{task.name}' on {day['date']} ({start_t:%H:%M}-{end_t:%H:%M}): {warn} Shift created unassigned for smart scheduler."
                     )
-            else:
-                # Workload balancing: sort candidate days by lowest scheduled load
-                candidate_days.sort(key=lambda d: d["scheduled_hours"])
+                self._create_schedule_slots(task, day["date"], start_t, end_t, assigned_emp)
+                self._record_day_usage(day, start_t, end_t, headcount)
 
-            day_index = 0
-            while remaining_dur > 0 and day_index < len(candidate_days):
-                curr_day = candidate_days[day_index]
-                day_capacity = curr_day["duration_hours"]
+        # Phase 1B: Fixed Non-Recurring Tasks
+        for task in fixed_non_recurring:
+            self._schedule_non_recurring_task(task, open_days)
 
-                if task.preferred_window == Task.PreferredWindow.OPEN_TO_CLOSE:
-                    chunk_dur = day_capacity
-                    remaining_dur = 0.0
-                else:
-                    chunk_dur = min(remaining_dur, day_capacity)
-                    remaining_dur -= chunk_dur
-
-                start_t, end_t = calculate_slot_times(
-                    curr_day["open_time"], curr_day["close_time"], chunk_dur, task.preferred_window
+        # Phase 2A: Flexible Recurring Tasks
+        for task in flexible_recurring:
+            headcount = max(1, task.required_people)
+            for day in open_days:
+                dur = float(task.duration_hours)
+                start_t, end_t, assigned_emp, warn = self._find_best_slot_times(
+                    day, dur, task.preferred_window, task.employee
                 )
-                self._create_schedule_slots(task, curr_day["date"], start_t, end_t)
-                curr_day["scheduled_hours"] += chunk_dur
-                day_index += 1
+                if warn and task.employee and assigned_emp is None:
+                    self.warnings.append(
+                        f"Task '{task.name}' on {day['date']} ({start_t:%H:%M}-{end_t:%H:%M}): {warn} Shift created unassigned for smart scheduler."
+                    )
+                self._create_schedule_slots(task, day["date"], start_t, end_t, assigned_emp)
+                self._record_day_usage(day, start_t, end_t, headcount)
 
-            if remaining_dur > 0:
-                self.warnings.append(
-                    f"Task '{task.name}' could not be fully scheduled ({remaining_dur:.1f} hours unscheduled due to open hours capacity)."
-                )
+        # Phase 2B: Flexible Non-Recurring Tasks
+        for task in flexible_non_recurring:
+            self._schedule_non_recurring_task(task, open_days)
 
         # 4. Atomic Database Transaction
         with transaction.atomic():
@@ -366,9 +563,13 @@ class ShiftGeneratorService:
                     status=Schedule.Status.SCHEDULED,
                 )
                 if self.department:
-                    qs_to_delete = qs_to_delete.filter(task__department=self.department)
+                    qs_to_delete = qs_to_delete.filter(
+                        Q(task__department=self.department) | Q(department=self.department)
+                    )
                 else:
-                    qs_to_delete = qs_to_delete.filter(task__company=self.company)
+                    qs_to_delete = qs_to_delete.filter(
+                        Q(task__company=self.company) | Q(company=self.company)
+                    )
                 qs_to_delete.delete()
 
             created = Schedule.objects.bulk_create(self.schedules_to_create)

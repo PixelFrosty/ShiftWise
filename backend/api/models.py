@@ -118,6 +118,8 @@ class Schedule(models.Model):
                 self.company = self.task.company
             if getattr(self.task, 'department_id', None):
                 self.department = self.task.department
+            if not self.task_name:
+                self.task_name = self.task.name
         if not self.company_id and self.department and getattr(self.department, 'company_id', None):
             self.company = self.department.company
         super().save(*args, **kwargs)
