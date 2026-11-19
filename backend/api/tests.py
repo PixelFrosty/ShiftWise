@@ -525,6 +525,36 @@ class ScheduleCreateTests(ScheduleApiBase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertNotEqual(response.data['created_at'][:4], '2000')
 
+    def test_schedule_inherits_company_and_department_from_task(self):
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Kitchen Duty'
+        )
+        s = Schedule.objects.create(
+            task=task,
+            task_name=task.name,
+            employee=self.employee,
+            shift_date=DAY,
+            start_time='10:00',
+            end_time='14:00'
+        )
+        self.assertEqual(s.company, self.employee.company)
+        self.assertEqual(s.department, self.employee.department)
+
+    def test_schedule_attached_company_and_department_without_task(self):
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Custom Task',
+            employee=self.employee,
+            shift_date=DAY,
+            start_time='10:00',
+            end_time='14:00'
+        )
+        self.assertEqual(s.company, self.employee.company)
+        self.assertEqual(s.department, self.employee.department)
+
 
 class ScheduleOverlapTests(ScheduleApiBase):
     def test_overlap_same_employee_rejected(self):

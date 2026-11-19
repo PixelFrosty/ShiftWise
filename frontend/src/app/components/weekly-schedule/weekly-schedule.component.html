@@ -4,7 +4,7 @@
     <div>
       <div class="flex items-center gap-2 mb-3">
         @if (deptName) {
-          <span class="px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-bold tracking-wider uppercase" data-testid="dept-label">{{ deptName }} department</span>
+          <span class="px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-bold tracking-wider uppercase" data-testid="dept-label">{{ deptId === null ? 'All departments' : deptName + ' department' }}</span>
         }
         @if (!canEdit) {
           <span class="px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium" data-testid="view-only">View only</span>
@@ -26,9 +26,10 @@
 
   <!-- Staff toolbar -->
   <div class="flex flex-wrap items-center gap-3 mb-5">
-    @if (departments.length > 1) {
+    @if (departments.length > 0) {
       <label for="dept-select" class="text-sm font-semibold text-slate-700">Department</label>
       <select id="dept-select" [(ngModel)]="deptId" (ngModelChange)="changeDepartment()" name="deptSelect" class="h-9 border border-slate-300 rounded-md px-2 bg-white text-sm" data-testid="dept-select">
+        <option [ngValue]="null">All departments</option>
         @for (d of departments; track d.id) { <option [ngValue]="d.id">{{ d.name }}{{ isStaff && !runs(d.id) ? ' (view only)' : '' }}{{ !isStaff && d.id === homeId ? ' (home)' : '' }}</option> }
       </select>
     }
@@ -531,6 +532,18 @@
           </select>
         </div>
 
+        @if (!newShiftTaskId) {
+          <div>
+            <label class="block text-xs text-slate-600 mb-0.5">Department</label>
+            <select [(ngModel)]="newShiftDeptId" name="nsDept" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="ns-department">
+              <option [ngValue]="null" disabled>Select department…</option>
+              @for (d of departments; track d.id) {
+                <option [ngValue]="d.id">{{ d.name }}</option>
+              }
+            </select>
+          </div>
+        }
+
         <div>
           <label class="block text-xs text-slate-600 mb-0.5">Schedule name</label>
           <input type="text" [(ngModel)]="newShift.name" name="nsName" maxlength="100" placeholder="e.g. Morning Shift" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-name" />
@@ -554,11 +567,11 @@
             <label class="block text-xs text-slate-600 font-medium">Assign employees (Max: {{ newShift.headcount }})</label>
             <span class="text-xs text-slate-500">{{ newShiftEmployees.length }} of {{ newShift.headcount }} selected</span>
           </div>
-          @if (deptPeople().length === 0) {
+          @if (addableEmployeesForNewShift.length === 0) {
             <p class="text-xs text-slate-400">No employees available</p>
           } @else {
             <div class="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50" data-testid="ns-employee-list">
-              @for (emp of deptPeople(); track emp.id) {
+              @for (emp of addableEmployeesForNewShift; track emp.id) {
                 <label class="flex items-center justify-between text-xs py-1 px-1.5 rounded hover:bg-white cursor-pointer">
                   <div class="flex items-center gap-2">
                     <input type="checkbox"

@@ -108,12 +108,13 @@ class TaskSerializer(serializers.ModelSerializer):
 class ScheduleSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     task_required_people = serializers.SerializerMethodField()
-    department = serializers.SerializerMethodField()
+    company = serializers.PrimaryKeyRelatedField(queryset=Company.objects.all(), required=False, allow_null=True)
+    department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = Schedule
-        fields = ['id', 'task', 'task_name', 'employee', 'employee_name', 'shift_date', 'start_time',
-                  'end_time', 'status', 'notes', 'task_required_people', 'department', 'created_at', 'modified_at']
+        fields = ['id', 'company', 'department', 'task', 'task_name', 'employee', 'employee_name', 'shift_date', 'start_time',
+                  'end_time', 'status', 'notes', 'task_required_people', 'created_at', 'modified_at']
         read_only_fields = ['created_at', 'modified_at']
         extra_kwargs = {
             'employee': {'required': True, 'allow_null': True},
@@ -129,12 +130,23 @@ class ScheduleSerializer(serializers.ModelSerializer):
             return obj.task.required_people
         return None
 
-    def get_department(self, obj):
-        if obj.employee and obj.employee.department_id:
-            return obj.employee.department_id
-        if obj.task and obj.task.department_id:
-            return obj.task.department_id
-        return None
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        if ret.get('department') is None:
+            if instance.department_id:
+                ret['department'] = instance.department_id
+            elif instance.employee and instance.employee.department_id:
+                ret['department'] = instance.employee.department_id
+            elif instance.task and instance.task.department_id:
+                ret['department'] = instance.task.department_id
+        if ret.get('company') is None:
+            if instance.company_id:
+                ret['company'] = instance.company_id
+            elif instance.task and instance.task.company_id:
+                ret['company'] = instance.task.company_id
+            elif instance.employee and instance.employee.company_id:
+                ret['company'] = instance.employee.company_id
+        return ret
 
     def validate_task_name(self, value):
         if not value.strip():

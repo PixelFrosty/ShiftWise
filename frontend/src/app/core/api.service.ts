@@ -546,6 +546,7 @@ export class ApiService {
     const employees = Array.isArray(body['employees']) ? body['employees'] : (body['employee'] ? [body['employee']] : []);
 
     const schedulePayload = {
+      department: deptId,
       task: task,
       task_name: taskName,
       shift_date: shiftDate,

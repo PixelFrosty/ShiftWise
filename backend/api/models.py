@@ -96,6 +96,8 @@ class Schedule(models.Model):
         COMPLETED = 'completed', 'Completed'
         CANCELLED = 'cancelled', 'Cancelled'
 
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name='schedules')
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, null=True, blank=True, related_name='schedules')
     task_name = models.CharField(max_length=255)
     task = models.ForeignKey('Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
     employee = models.ForeignKey(EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
@@ -109,6 +111,16 @@ class Schedule(models.Model):
 
     class Meta:
         ordering = ['shift_date', 'start_time', 'id']
+
+    def save(self, *args, **kwargs):
+        if self.task:
+            if getattr(self.task, 'company_id', None):
+                self.company = self.task.company
+            if getattr(self.task, 'department_id', None):
+                self.department = self.task.department
+        if not self.company_id and self.department and getattr(self.department, 'company_id', None):
+            self.company = self.department.company
+        super().save(*args, **kwargs)
 
     def __str__(self):
         emp = self.employee if self.employee else 'Unassigned'

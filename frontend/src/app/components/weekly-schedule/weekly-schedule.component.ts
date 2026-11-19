@@ -190,10 +190,10 @@ export class WeeklyScheduleComponent implements OnDestroy {
   get myProfileId(): number | null { return this.me?.profile?.id ?? null; }
   /** Manager or General Manager (may look at every department). */
   get isStaff(): boolean { return !!this.me?.profile?.can_edit_schedule; }
-  /** Staff may change only the departments they run; other departments are view only. */
-  get canEdit(): boolean { return this.isStaff && this.deptId !== null && this.managedIds.has(this.deptId); }
+  /** Staff may change only the departments they run; other departments are view only. When all departments is chosen, staff can edit. */
+  get canEdit(): boolean { return this.isStaff && (this.deptId === null || this.managedIds.has(this.deptId)); }
   get isCeo(): boolean { return this.me?.profile?.role === 'ceo'; }
-  get deptName(): string { return this.departments.find(d => d.id === this.deptId)?.name ?? ''; }
+  get deptName(): string { return this.deptId === null ? 'All' : (this.departments.find(d => d.id === this.deptId)?.name ?? ''); }
   get rangeLabel(): string { return formatWeekRange(this.monday); }
 
   get shortRange(): string {
@@ -362,15 +362,16 @@ export class WeeklyScheduleComponent implements OnDestroy {
   }
 
   reload(done?: () => void): void {
-    if (this.deptId === null) { this.loading.set(false); return; }
     this.pub.set(null);
-    this.api.publication(this.deptId, toIso(this.monday)).subscribe({ next: p => this.pub.set(p), error: () => this.pub.set(null) });
+    if (this.deptId !== null) {
+      this.api.publication(this.deptId, toIso(this.monday)).subscribe({ next: p => this.pub.set(p), error: () => this.pub.set(null) });
+    }
     const dept = this.deptId;
     // an employee loads every department they may see at once, so extra departments add into the hours card
     this.api.shifts(this.isStaff ? dept : null, toIso(this.monday), toIso(addDays(this.monday, 6))).subscribe({
       next: list => {
         this.weekAll.set(list);
-        this.shifts.set(this.isStaff ? list : list.filter(s => s.department.id === dept));
+        this.shifts.set(dept === null ? list : (this.isStaff ? list : list.filter(s => s.department.id === dept)));
         this.loading.set(false); this.loadError.set(''); done?.();
       },
       error: err => { this.loading.set(false); this.loadError.set(errorText(err)); }
@@ -509,11 +510,11 @@ export class WeeklyScheduleComponent implements OnDestroy {
 
   // --- automatic scheduler ---
   runAuto(confirmPending = false): void {
-    if (this.deptId === null || this.autoBusy) { return; }
+    if (this.autoBusy) { return; }
     this.autoBusy = true;
     this.autoError = '';
     this.autoPrompt = null;
-    this.api.autoSchedule(this.deptId, toIso(this.monday), toIso(addDays(this.monday, 6)), confirmPending).subscribe({
+    this.api.autoSchedule(this.deptId as any, toIso(this.monday), toIso(addDays(this.monday, 6)), confirmPending).subscribe({
       next: r => { this.autoBusy = false; this.autoResult = r; this.reload(); },
       error: (err: HttpErrorResponse) => {
         this.autoBusy = false;
@@ -589,10 +590,13 @@ export class WeeklyScheduleComponent implements OnDestroy {
   }
 
   // --- staff: add shift, templates, hours ---
+  newShiftDeptId: number | null = null;
+
   openAdd(iso?: string): void {
     this.panel = 'add';
     this.panelError = '';
     this.newShiftTaskId = null;
+    this.newShiftDeptId = this.deptId ?? this.departments[0]?.id ?? null;
     this.newShiftEmployees = [];
     this.newShift = { ...this.newShift, shift_date: iso ?? toIso(this.monday), name: '', headcount: 1 };
     if (!this.tasks().length) {
@@ -610,11 +614,27 @@ export class WeeklyScheduleComponent implements OnDestroy {
       if (task) {
         this.newShift.name = task.name;
         this.newShift.headcount = task.required_people;
+        if (task.department) {
+          this.newShiftDeptId = typeof task.department === 'object' ? (task.department as any).id : task.department;
+        }
         if (this.newShiftEmployees.length > task.required_people) {
           this.newShiftEmployees = this.newShiftEmployees.slice(0, task.required_people);
         }
       }
     }
+  }
+
+  get addableEmployeesForNewShift(): Employee[] {
+    const list = this.deptPeople();
+    const effectiveDeptId = this.newShiftTaskId
+      ? (this.tasks().find(t => t.id === this.newShiftTaskId)?.department ?? this.newShiftDeptId)
+      : this.newShiftDeptId;
+    const targetDeptId = typeof effectiveDeptId === 'object' && effectiveDeptId !== null ? (effectiveDeptId as any).id : effectiveDeptId;
+    if (!targetDeptId) { return list; }
+    return list.filter(p => {
+      const pDeptId = typeof p.department === 'object' ? p.department?.id : p.department;
+      return pDeptId === targetDeptId || (Array.isArray(p.extra_departments) && p.extra_departments.some(d => d.id === targetDeptId));
+    });
   }
 
   isEmployeeSelectedForNewShift(empId: number): boolean {
@@ -632,14 +652,31 @@ export class WeeklyScheduleComponent implements OnDestroy {
   }
 
   createShift(allowOutside = false): void {
-    if (this.deptId === null || this.busy) { return; }
+    if (this.busy) { return; }
+    this.panelError = '';
+
+    const effectiveDept = this.newShiftTaskId
+      ? (this.tasks().find(t => t.id === this.newShiftTaskId)?.department ?? this.newShiftDeptId ?? this.deptId)
+      : (this.newShiftDeptId ?? this.deptId);
+    const targetDeptId = typeof effectiveDept === 'object' && effectiveDept !== null ? (effectiveDept as any).id : effectiveDept;
+
+    if (!targetDeptId && !this.newShiftTaskId) {
+      this.panelError = 'Please select a department for this shift.';
+      return;
+    }
+
+    if (!this.newShift.name?.trim()) {
+      this.panelError = 'Please enter a schedule name.';
+      return;
+    }
+
     this.busy = true;
     const payload = {
       ...this.newShift,
       task: this.newShiftTaskId,
       employees: [...this.newShiftEmployees],
       headcount: Number(this.newShift.headcount),
-      department: this.deptId,
+      department: targetDeptId,
       ...(allowOutside ? { allow_outside_hours: true } : {})
     };
     this.api.createShift(payload).subscribe({
@@ -647,6 +684,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
         this.busy = false;
         this.newShiftEmployees = [];
         this.newShiftTaskId = null;
+        this.newShiftDeptId = null;
         this.closePanel();
         this.reload();
       },

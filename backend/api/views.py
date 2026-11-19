@@ -142,7 +142,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             qs = qs.filter(employee_id=self._int(params, 'employee'))
         if 'department' in params:
             dept_id = self._int(params, 'department')
-            qs = qs.filter(Q(employee__department_id=dept_id) | Q(task__department_id=dept_id))
+            qs = qs.filter(Q(employee__department_id=dept_id) | Q(task__department_id=dept_id) | Q(department_id=dept_id))
         if 'status' in params:
             if params['status'] not in Schedule.Status.values:
                 raise serializers.ValidationError({'status': f'Must be one of: {", ".join(Schedule.Status.values)}.'})
@@ -215,11 +215,17 @@ class ScheduleViewSet(viewsets.ModelViewSet):
 
         notes = data.get('notes', '')
         sched_status = data.get('status', Schedule.Status.SCHEDULED)
+        dept_val = data.get('department')
+        sched_dept = Department.objects.filter(pk=dept_val).first() if dept_val else None
+        comp_val = data.get('company')
+        sched_comp = Company.objects.filter(pk=comp_val).first() if comp_val else None
 
         created_schedules = []
         with transaction.atomic():
             for profile in emp_profiles:
                 s = Schedule.objects.create(
+                    company=sched_comp,
+                    department=sched_dept,
                     task=task,
                     task_name=task_name,
                     employee=profile,
@@ -234,6 +240,8 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             rem_slots = headcount - len(emp_profiles)
             for _ in range(rem_slots):
                 s = Schedule.objects.create(
+                    company=sched_comp,
+                    department=sched_dept,
                     task=task,
                     task_name=task_name,
                     employee=None,
