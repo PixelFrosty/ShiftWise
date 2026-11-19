@@ -26,7 +26,7 @@ export class LandingPageComponent {
   justRegistered = false;
 
   constructor() {
-    const state = this.router.getCurrentNavigation()?.extras.state;
+    const state = this.router.getCurrentNavigation()?.extras.state || (typeof history !== 'undefined' ? history.state : undefined);
     if (state?.['registered']) {
       this.justRegistered = true;
       this.email = typeof state['email'] === 'string' ? state['email'] : '';
