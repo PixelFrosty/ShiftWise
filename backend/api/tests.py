@@ -1651,4 +1651,159 @@ class ScheduleMultipleEmployeesTests(ScheduleApiBase):
         self.assertTrue(any(t['name'] == 'Multi Cashier' for t in res.data))
 
 
+class SmartShiftAssignerApiTests(ScheduleApiBase):
+    def setUp(self):
+        super().setUp()
+        self.emp2 = make_employee('assignee2@example.com', department=self.employee.department)
+        # Operating hours
+        CompanyHours.objects.create(
+            company=self.employee.company,
+            monday_start=datetime.time(9, 0), monday_end=datetime.time(17, 0),
+            tuesday_start=datetime.time(9, 0), tuesday_end=datetime.time(17, 0),
+            wednesday_start=datetime.time(9, 0), wednesday_end=datetime.time(17, 0),
+            thursday_start=datetime.time(9, 0), thursday_end=datetime.time(17, 0),
+            friday_start=datetime.time(9, 0), friday_end=datetime.time(17, 0),
+        )
+        self.week_start = datetime.date(2026, 11, 16)  # Monday
+
+    def test_assign_shifts_api_fills_unassigned_slots(self):
+        # Create 2 unassigned schedule slots for Nov 16
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Floor Shift 1',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Floor Shift 2',
+            shift_date=self.week_start,
+            start_time=datetime.time(13, 0),
+            end_time=datetime.time(17, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['total_unassigned_slots'], 2)
+        self.assertEqual(res.data['slots_filled'], 2)
+        self.assertEqual(res.data['unfillable_slots'], 0)
+
+        s1.refresh_from_db()
+        s2.refresh_from_db()
+        self.assertIsNotNone(s1.employee)
+        self.assertIsNotNone(s2.employee)
+
+    def test_shift_auto_schedule_legacy_endpoint_delegates_to_assigner(self):
+        # Create unassigned slot
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Auto Scheduled Slot',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('shift_auto_schedule_api')
+        payload = {
+            'department': self.employee.department.pk,
+            'date_from': self.week_start.isoformat(),
+            'date_to': '2026-11-22',
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['created'], 1)
+        self.assertEqual(res.data['slots_filled'], 1)
+
+        s.refresh_from_db()
+        self.assertIsNotNone(s.employee)
+
+    def test_assign_shifts_respects_skills(self):
+        forklift = Skill.objects.create(company=self.employee.company, name='Forklift')
+        self.emp2.skills.add(forklift)
+        # self.employee does not have forklift skill
+
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Warehouse Loading',
+            required_people=1,
+            duration_hours=4.0
+        )
+        task.skills.add(forklift)
+
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task=task,
+            task_name=task.name,
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots_filled'], 1)
+
+        s.refresh_from_db()
+        self.assertEqual(s.employee, self.emp2)
+
+    def test_assign_shifts_respects_time_off(self):
+        TimeOffRequest.objects.create(
+            employee=self.employee,
+            start_date=self.week_start,
+            end_date=self.week_start,
+            status=TimeOffRequest.Status.APPROVED
+        )
+
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Daily Register',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots_filled'], 1)
+
+        s.refresh_from_db()
+        # self.employee is on leave, so self.emp2 must be assigned
+        self.assertEqual(s.employee, self.emp2)
+
+
 

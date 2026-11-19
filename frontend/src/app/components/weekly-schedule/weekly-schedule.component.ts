@@ -3,7 +3,7 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { ApiService, AutoScheduleResult, Employee, GenerateShiftsPayload, GenerateShiftsResult, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate, TaskItem } from '../../core/api.service';
+import { ApiService, AssignShiftDetail, AssignShiftsPayload, AssignShiftsResult, AutoScheduleResult, Employee, GenerateShiftsPayload, GenerateShiftsResult, PostReview, Publication, Shift, ShiftPerson, ShiftTemplate, TaskItem } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { DepartmentRef, errorText } from '../../core/models';
 import { addDays, formatWeekRange, fromIso, mondayOf, toIso } from '../shared/week-utils';
@@ -108,6 +108,18 @@ export class WeeklyScheduleComponent implements OnDestroy {
   shiftGenError = '';
   shiftGenResult: GenerateShiftsResult | null = null;
   shiftGenClearExisting = false;
+
+  // smart shift assignment
+  shiftAssignPrompt = false;
+  shiftAssignBusy = false;
+  shiftAssignError = '';
+  shiftAssignResult: AssignShiftsResult | null = null;
+
+  // clear assignments
+  clearPrompt = false;
+  clearBusy = false;
+  clearError = '';
+  clearSuccess = '';
   /** Shown when a shift would sit outside the hours of operation; Yes sends it again with allow_outside_hours. */
   outsidePrompt: { text: string; action: 'create' | 'edit' } | null = null;
   confirmPrompt: { kind: 'time_off' | 'warning'; text: string } | null = null;
@@ -557,21 +569,100 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.addPerson();
   }
 
-  // --- automatic scheduler ---
-  runAuto(confirmPending = false): void {
-    if (this.autoBusy) { return; }
-    this.autoBusy = true;
-    this.autoError = '';
-    this.autoPrompt = null;
-    this.api.autoSchedule(this.deptId as any, toIso(this.monday), toIso(addDays(this.monday, 6)), confirmPending).subscribe({
-      next: r => { this.autoBusy = false; this.autoResult = r; this.reload(); },
+  // --- smart shift assignment ---
+  openShiftAssignment(): void {
+    this.shiftAssignPrompt = true;
+    this.shiftAssignBusy = false;
+    this.shiftAssignError = '';
+    this.shiftAssignResult = null;
+  }
+
+  closeShiftAssignment(): void {
+    if (this.shiftAssignBusy) { return; }
+    this.shiftAssignPrompt = false;
+    this.shiftAssignBusy = false;
+    this.shiftAssignError = '';
+    this.shiftAssignResult = null;
+  }
+
+  executeShiftAssignment(): void {
+    if (this.shiftAssignBusy) { return; }
+    this.shiftAssignBusy = true;
+    this.shiftAssignError = '';
+    this.shiftAssignResult = null;
+
+    const companyId = this.auth.me()?.profile?.company?.id ?? 1;
+    const payload: AssignShiftsPayload = {
+      company_id: companyId,
+      week_start: toIso(this.monday),
+      department_id: this.deptId,
+    };
+
+    const startTime = Date.now();
+    this.api.assignShifts(payload).subscribe({
+      next: res => {
+        const elapsed = Date.now() - startTime;
+        const delay = Math.max(0, 700 - elapsed);
+        setTimeout(() => {
+          this.shiftAssignBusy = false;
+          this.shiftAssignResult = res;
+          this.reload();
+        }, delay);
+      },
       error: (err: HttpErrorResponse) => {
-        this.autoBusy = false;
+        this.shiftAssignBusy = false;
         if (err.status === 409 && err.error?.code === 'pending_time_off') {
           this.autoPrompt = { count: err.error.count, people: err.error.people ?? [] };
-        } else { this.autoError = errorText(err); }
+        } else {
+          this.shiftAssignError = errorText(err) || 'Failed to assign shifts using smart scheduler.';
+        }
       }
     });
+  }
+
+  // --- clear assignments ---
+  openClearAssignments(): void {
+    this.clearPrompt = true;
+    this.clearBusy = false;
+    this.clearError = '';
+  }
+
+  closeClearAssignments(): void {
+    if (this.clearBusy) { return; }
+    this.clearPrompt = false;
+    this.clearBusy = false;
+    this.clearError = '';
+  }
+
+  confirmClearAssignments(): void {
+    if (this.clearBusy) { return; }
+    this.clearBusy = true;
+    this.clearError = '';
+
+    const companyId = this.auth.me()?.profile?.company?.id ?? 1;
+    const payload = {
+      company_id: companyId,
+      week_start: toIso(this.monday),
+      department_id: this.deptId,
+    };
+
+    this.api.clearAssignments(payload).subscribe({
+      next: res => {
+        this.clearBusy = false;
+        this.clearPrompt = false;
+        this.clearSuccess = `Cleared assignments from ${res.cleared_count} shift slot${res.cleared_count === 1 ? '' : 's'}. All shifts are now open slots.`;
+        this.reload();
+        setTimeout(() => { this.clearSuccess = ''; }, 6000);
+      },
+      error: err => {
+        this.clearBusy = false;
+        this.clearError = errorText(err) || 'Failed to clear assignments.';
+      }
+    });
+  }
+
+  runAuto(confirmPending = false): void {
+    this.openShiftAssignment();
   }
 
   nameClass(p: ShiftPerson): string {

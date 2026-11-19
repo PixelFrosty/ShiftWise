@@ -160,7 +160,46 @@ export interface PostReview extends Publication {
   open_shifts: string[]; warnings: string[]; people: { name: string; hours: number; shifts: number }[];
 }
 
-export interface AutoScheduleResult { created: number; open_before: number; open_after: number; notes: string[]; }
+export interface AssignShiftDetail {
+  schedule_id: number;
+  task_name: string;
+  shift_date: string;
+  start_time: string;
+  end_time: string;
+  employee_id: number;
+  employee_name: string;
+}
+
+export interface AssignShiftsPayload {
+  company_id: number;
+  week_start: string;
+  department_id?: number | null;
+  forced_groups?: number[][];
+}
+
+export interface AssignShiftsResult {
+  company_id: number;
+  week_start: string;
+  week_end: string;
+  solver_status: string;
+  total_unassigned_slots: number;
+  slots_filled: number;
+  unfillable_slots: number;
+  average_compatibility_score: number | null;
+  assigned_shifts: AssignShiftDetail[];
+  unfillable_details?: any[];
+}
+
+export interface AutoScheduleResult {
+  created: number;
+  open_before: number;
+  open_after: number;
+  notes: string[];
+  solver_status?: string;
+  average_compatibility_score?: number | null;
+  assigned_shifts?: AssignShiftDetail[];
+  unfillable_details?: any[];
+}
 
 export interface GenerateShiftsPayload {
   company_id: number;
@@ -760,6 +799,12 @@ export class ApiService {
   }
   generateShifts(payload: GenerateShiftsPayload): Observable<GenerateShiftsResult> {
     return this.http.post<GenerateShiftsResult>(`${API_URL}/schedules/generate/`, payload);
+  }
+  assignShifts(payload: AssignShiftsPayload): Observable<AssignShiftsResult> {
+    return this.http.post<AssignShiftsResult>(`${API_URL}/schedules/assign/`, payload);
+  }
+  clearAssignments(payload: { company_id: number; week_start: string; department_id?: number | null }): Observable<{ cleared_count: number }> {
+    return this.http.post<{ cleared_count: number }>(`${API_URL}/schedules/clear-assignments/`, payload);
   }
   /** People in one of my departments (default: my home department) who can answer shift requests. */
   coworkers(department?: number): Observable<{ id: number; name: string }[]> {

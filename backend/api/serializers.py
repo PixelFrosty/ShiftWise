@@ -353,4 +353,48 @@ class GenerateShiftsSerializer(serializers.Serializer):
                     {'department_id': 'Department does not exist or does not belong to this company.'}
                 )
         return attrs
+
+
+class AssignShiftsSerializer(serializers.Serializer):
+    company_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    week_start = serializers.DateField(required=True)
+    department_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    forced_groups = serializers.ListField(
+        child=serializers.ListField(child=serializers.IntegerField()),
+        required=False,
+        default=list,
+    )
+
+    def validate_company_id(self, value):
+        if value is not None and not Company.objects.filter(pk=value).exists():
+            raise serializers.ValidationError(f"Company #{value} does not exist.")
+        return value
+
+    def validate(self, attrs):
+        dept_id = attrs.get('department_id')
+        comp_id = attrs.get('company_id')
+        if not comp_id and dept_id:
+            dept = Department.objects.filter(pk=dept_id).first()
+            if dept:
+                comp_id = dept.company_id
+                attrs['company_id'] = comp_id
+        if not comp_id and self.context.get('request') and self.context['request'].user.is_authenticated:
+            prof = getattr(self.context['request'].user, 'employee_profiles', None)
+            if prof and prof.exists():
+                comp_id = prof.first().company_id
+                attrs['company_id'] = comp_id
+        if not comp_id:
+            first_c = Company.objects.first()
+            if first_c:
+                comp_id = first_c.id
+                attrs['company_id'] = comp_id
+
+        if not comp_id or not Company.objects.filter(pk=comp_id).exists():
+            raise serializers.ValidationError({'company_id': 'Company does not exist.'})
+
+        if dept_id:
+            if not Department.objects.filter(pk=dept_id, company_id=comp_id).exists():
+                raise serializers.ValidationError(
+                    {'department_id': 'Department does not exist or does not belong to this company.'}
+                )
         return attrs

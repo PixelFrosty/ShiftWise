@@ -26,6 +26,7 @@ from .models import (
 )
 from .serializers import (
     AvailabilitySlotSerializer,
+    AssignShiftsSerializer,
     CompatibilityScoreSerializer,
     DepartmentSerializer,
     EmployeeProfileSerializer,
@@ -36,6 +37,7 @@ from .serializers import (
     TimeOffRequestSerializer,
     UserSerializer,
 )
+from .services.shift_assigner import SmartShiftAssignerService
 from .services.shift_generator import ShiftGeneratorService
 
 @api_view(['GET'])
@@ -416,6 +418,89 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             msg = exc.message if hasattr(exc, 'message') else str(exc)
             return Response({'error': msg}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['post'], url_path='assign')
+    def assign(self, request):
+        """
+        POST /api/schedules/assign/
+        Body: { "company_id": 1, "week_start": "YYYY-MM-DD", "department_id": null, "forced_groups": [[1, 2]] }
+        Assigns employees to unassigned schedule slots using OR-Tools CP-SAT.
+        """
+        serializer = AssignShiftsSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        company = Company.objects.get(pk=data['company_id'])
+        department = None
+        if data.get('department_id'):
+            department = Department.objects.get(pk=data['department_id'])
+
+        service = SmartShiftAssignerService(
+            company=company,
+            week_start=data['week_start'],
+            department=department,
+            forced_groups=data.get('forced_groups', []),
+        )
+        try:
+            result = service.assign()
+            return Response(result, status=status.HTTP_200_OK)
+        except DjangoValidationError as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return Response({'error': msg}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='clear-assignments')
+    def clear_assignments(self, request):
+        """
+        POST /api/schedules/clear-assignments/
+        Body: { "company_id": 1, "week_start": "YYYY-MM-DD", "department_id": null }
+        Unassigns all employees from scheduled shifts in the specified week (leaving shifts as empty slots).
+        """
+        company_id = request.data.get('company_id')
+        dept_id = request.data.get('department_id') or request.data.get('department')
+        week_start_str = request.data.get('week_start') or request.data.get('date_from')
+
+        if not company_id and dept_id:
+            dept = Department.objects.filter(pk=dept_id).first()
+            if dept:
+                company_id = dept.company_id
+        if not company_id and request.user.is_authenticated:
+            prof = getattr(request.user, 'employee_profiles', None)
+            if prof and prof.exists():
+                company_id = prof.first().company_id
+        if not company_id:
+            first_c = Company.objects.first()
+            if first_c:
+                company_id = first_c.id
+
+        if not week_start_str:
+            return Response({'error': 'week_start is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        week_start = parse_date(str(week_start_str))
+        if not week_start:
+            return Response({'error': 'Invalid week_start format.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        monday = week_start - datetime.timedelta(days=week_start.weekday())
+        sunday = monday + datetime.timedelta(days=6)
+
+        qs = Schedule.objects.filter(
+            shift_date__gte=monday,
+            shift_date__lte=sunday,
+            status=Schedule.Status.SCHEDULED,
+        )
+        if dept_id:
+            qs = qs.filter(Q(task__department_id=dept_id) | Q(department_id=dept_id))
+        elif company_id:
+            qs = qs.filter(Q(task__company_id=company_id) | Q(company_id=company_id))
+
+        count_updated = qs.filter(employee__isnull=False).update(employee=None)
+
+        return Response({
+            'company_id': company_id,
+            'week_start': monday.isoformat(),
+            'week_end': sunday.isoformat(),
+            'department_id': dept_id,
+            'cleared_count': count_updated,
+        }, status=status.HTTP_200_OK)
+
 
 class CompatibilityScoreViewSet(viewsets.ModelViewSet):
     """
@@ -692,6 +777,44 @@ def shift_publish(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def shift_auto_schedule(request):
+    """
+    POST /api/shifts/auto-schedule/
+    Legacy or direct route: assigns employees to unassigned schedule slots using OR-Tools CP-SAT.
+    Accepts { department, date_from, date_to } or { company_id, week_start, department_id }.
+    """
+    data = dict(request.data)
+    if 'date_from' in data and 'week_start' not in data:
+        data['week_start'] = data['date_from']
+    if 'department' in data and 'department_id' not in data:
+        data['department_id'] = data['department']
+
+    serializer = AssignShiftsSerializer(data=data, context={'request': request})
+    if serializer.is_valid():
+        valid_data = serializer.validated_data
+        company = Company.objects.get(pk=valid_data['company_id'])
+        department = None
+        if valid_data.get('department_id'):
+            department = Department.objects.get(pk=valid_data['department_id'])
+
+        service = SmartShiftAssignerService(
+            company=company,
+            week_start=valid_data['week_start'],
+            department=department,
+            forced_groups=valid_data.get('forced_groups', []),
+        )
+        try:
+            res = service.assign()
+            return Response({
+                'created': res['slots_filled'],
+                'open_before': res['total_unassigned_slots'],
+                'open_after': res['unfillable_slots'],
+                'notes': [f"Assigned {res['slots_filled']} shifts using smart scheduler (Status: {res['solver_status']})."],
+                **res,
+            }, status=status.HTTP_200_OK)
+        except DjangoValidationError as exc:
+            msg = exc.message if hasattr(exc, 'message') else str(exc)
+            return Response({'error': msg}, status=status.HTTP_400_BAD_REQUEST)
+
     return Response({
         'created': 0,
         'open_before': 0,

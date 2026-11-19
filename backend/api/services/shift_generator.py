@@ -83,6 +83,8 @@ class ShiftGeneratorService:
     Generates weekly shift schedules for a company based on:
     - Company operating hours (from CompanyHours)
     - Active projects and tasks
+    - Staff concurrency limits (based on active employee headcount)
+    - Intra-day timeline density packing for flexible tasks (waterfilling valleys)
     - Task priority, duration, preferred window, and headcount
     - Pre-assigned employees and their availability / approved time-off
     - Concurrency leveling for flexible shifts and load balancing across the week
@@ -93,6 +95,8 @@ class ShiftGeneratorService:
         Project.Priority.MEDIUM: 2,
         Project.Priority.LOW: 1,
     }
+
+    SLOT_STEP_MINUTES = 30
 
     def __init__(
         self,
@@ -107,6 +111,12 @@ class ShiftGeneratorService:
         self.week_end = self.week_start + datetime.timedelta(days=6)
         self.department = department
         self.clear_existing = clear_existing
+
+        # Calculate max concurrent staffing capacity
+        staff_qs = EmployeeProfile.objects.filter(company=self.company)
+        if self.department:
+            staff_qs = staff_qs.filter(department=self.department)
+        self.max_concurrency = max(1, staff_qs.count())
 
         self.warnings: List[str] = []
         self.schedules_to_create: List[Schedule] = []
@@ -200,6 +210,120 @@ class ShiftGeneratorService:
             self._seed_existing_schedules(days)
 
         return days
+
+    def _find_best_slot_times(
+        self,
+        day_meta: Dict[str, Any],
+        duration_hours: float,
+        window: str,
+        headcount: int,
+        employee: Optional[EmployeeProfile] = None,
+    ) -> Tuple[datetime.time, datetime.time]:
+        """
+        Determines the optimal start and end time for a shift within day_meta.
+        For fixed windows (OPEN_TO_CLOSE, BEGINNING, END, MID_DAY), calculates the anchored time.
+        For FLEXIBLE windows, uses density packing (waterfilling valleys) across the day's timeline
+        so tasks space out naturally rather than stacking at opening time.
+        """
+        open_time = day_meta["open_time"]
+        close_time = day_meta["close_time"]
+        open_min = time_to_minutes(open_time)
+        close_min = time_to_minutes(close_time)
+        day_span_min = close_min - open_min
+
+        dur_min = int(duration_hours * 60)
+        dur_min = min(dur_min, day_span_min)
+
+        # 1. Fixed window placement
+        if window == Task.PreferredWindow.OPEN_TO_CLOSE:
+            return open_time, close_time
+
+        if window == Task.PreferredWindow.BEGINNING_OF_DAY:
+            start_min = open_min
+            end_min = min(close_min, open_min + dur_min)
+            return minutes_to_time(start_min), minutes_to_time(end_min)
+
+        if window == Task.PreferredWindow.END_OF_DAY:
+            end_min = close_min
+            start_min = max(open_min, close_min - dur_min)
+            return minutes_to_time(start_min), minutes_to_time(end_min)
+
+        if window == Task.PreferredWindow.MID_DAY:
+            mid_min = open_min + (day_span_min // 2)
+            half_dur = dur_min // 2
+            start_min = max(open_min, mid_min - half_dur)
+            end_min = min(close_min, start_min + dur_min)
+            if end_min == close_min:
+                start_min = max(open_min, close_min - dur_min)
+            return minutes_to_time(start_min), minutes_to_time(end_min)
+
+        # 2. FLEXIBLE window: Density / Waterfilling search
+        step = self.SLOT_STEP_MINUTES
+        timeline = day_meta["timeline"]
+        num_intervals = len(timeline)
+
+        candidate_slots = []
+        if dur_min <= 0:
+            return open_time, open_time
+
+        for start_m in range(open_min, close_min - dur_min + 1, step):
+            end_m = start_m + dur_min
+            start_t = minutes_to_time(start_m)
+            end_t = minutes_to_time(end_m)
+
+            # If task has a pre-assigned employee, check availability for this candidate window
+            if employee:
+                is_avail, _ = self._is_employee_available(employee, day_meta["date"], start_t, end_t)
+                if not is_avail:
+                    continue
+
+            # Map to timeline interval indices
+            start_idx = max(0, (start_m - open_min) // step)
+            end_idx = min(num_intervals, (end_m - open_min + step - 1) // step)
+
+            window_counts = timeline[start_idx:end_idx] if end_idx > start_idx else [0]
+            peak = (max(window_counts) if window_counts else 0) + headcount
+            density = sum(window_counts)
+
+            fits_capacity = peak <= self.max_concurrency
+
+            # Optimization score:
+            # 1. Fits within max staffing capacity (0 = yes, 1 = overflow)
+            # 2. Lowest peak headcount in that window
+            # 3. Lowest density sum (valley)
+            # 4. Earliest start time (tie breaker)
+            score = (0 if fits_capacity else 1, peak, density, start_m)
+            candidate_slots.append((score, start_t, end_t))
+
+        if candidate_slots:
+            candidate_slots.sort(key=lambda x: x[0])
+            return candidate_slots[0][1], candidate_slots[0][2]
+
+        # Fallback if no window matched
+        return open_time, minutes_to_time(min(close_min, open_min + dur_min))
+
+    def _record_shift_on_day(
+        self,
+        day_meta: Dict[str, Any],
+        start_time: datetime.time,
+        end_time: datetime.time,
+        headcount: int,
+        duration_hours: float,
+    ):
+        """Updates the day's timeline interval counts and scheduled person-hours."""
+        step = self.SLOT_STEP_MINUTES
+        open_min = time_to_minutes(day_meta["open_time"])
+        start_min = time_to_minutes(start_time)
+        end_min = time_to_minutes(end_time)
+
+        start_idx = max(0, (start_min - open_min) // step)
+        end_idx = min(len(day_meta["timeline"]), (end_min - open_min + step - 1) // step)
+
+        for i in range(start_idx, end_idx):
+            day_meta["timeline"][i] += headcount
+
+        day_meta["scheduled_hours"] += duration_hours
+        day_meta["scheduled_person_hours"] += (duration_hours * headcount)
 
     def _is_employee_available(
         self,
@@ -357,8 +481,10 @@ class ShiftGeneratorService:
             task.project.priority if task.project else Project.Priority.MEDIUM, 2
         )
         task_prio = self.PRIORITY_WEIGHTS.get(task.priority, 2)
+        # Fixed window tasks (1) anchor their specific times before flexible tasks (0) fill valleys
+        is_fixed = 0 if task.preferred_window == Task.PreferredWindow.FLEXIBLE else 1
         dur = float(task.duration_hours or 1.0)
-        return (proj_prio, task_prio, -dur)
+        return (proj_prio, is_fixed, task_prio, -dur)
 
     def _create_schedule_slots(
         self,
