@@ -65,7 +65,38 @@ jobs:
           python backend/manage.py test api
 
   # ----------------------------------------------------------------------------
-  # Job 2: Podman Multi-Container Stack Verification
+  # Job 2: Standalone Frontend Test Suite
+  # Validates TypeScript compilation, builds bundles, and runs unit tests.
+  # ----------------------------------------------------------------------------
+  frontend-tests:
+    name: Frontend Tests (Fast Suite)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build & type-check Angular application
+        working-directory: frontend
+        run: npm run build
+
+      - name: Run Angular unit tests
+        working-directory: frontend
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+
+  # ----------------------------------------------------------------------------
+  # Job 3: Podman Multi-Container Stack Verification
   # Builds containers using Podman, validates frontend/backend/database startup,
   # and verifies the containerized runtime end-to-end.
   # ----------------------------------------------------------------------------
