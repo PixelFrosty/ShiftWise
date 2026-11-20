@@ -40,6 +40,7 @@ services:
             - "4200:4200"
         volumes:
             - ./frontend:/app:Z
+            - /app/node_modules
         networks:
             - frontend_net
         depends_on:
