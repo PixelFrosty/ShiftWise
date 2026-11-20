@@ -430,21 +430,33 @@
   <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 text-sm text-slate-600">
       <div class="flex items-center gap-5">
-        <span class="flex items-center gap-2" data-testid="legend-mine"><span class="inline-block w-4 h-4 rounded bg-brand-200 border-l-4 border-brand-600"></span>Your shift</span>
-        <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded bg-slate-300"></span>Scheduled</span>
-        <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded border-2 border-dashed border-slate-500"></span>Open shift</span>
-        <span class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-brand-500"></span>Today</span>
-        <span class="flex items-center gap-2"><span class="inline-block px-1.5 rounded border border-brand-300 bg-brand-50 text-brand-800 text-[11px] font-semibold">Name</span></span>
-        <span class="flex items-center gap-2" data-testid="legend-minor"><span class="inline-block px-1.5 rounded border border-yellow-400 bg-yellow-100 text-yellow-800 text-[11px] font-semibold">Name</span>Under 18</span>
+        @if (view() !== 'stats') {
+          <span class="flex items-center gap-2" data-testid="legend-mine"><span class="inline-block w-4 h-4 rounded bg-brand-200 border-l-4 border-brand-600"></span>Your shift</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded bg-slate-300"></span>Scheduled</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded border-2 border-dashed border-slate-500"></span>Open shift</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-brand-500"></span>Today</span>
+          <span class="flex items-center gap-2"><span class="inline-block px-1.5 rounded border border-brand-300 bg-brand-50 text-brand-800 text-[11px] font-semibold">Name</span></span>
+          <span class="flex items-center gap-2" data-testid="legend-minor"><span class="inline-block px-1.5 rounded border border-yellow-400 bg-yellow-100 text-yellow-800 text-[11px] font-semibold">Name</span>Under 18</span>
+        } @else {
+          <div class="flex items-center gap-2 text-slate-800 font-bold text-sm">
+            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+            </svg>
+            <span>Hours Distribution &amp; Schedule Analytics</span>
+          </div>
+        }
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <span class="text-xs text-slate-400">{{ canEdit ? 'Click a shift to assign people or edit it' : isStaff ? 'Click a shift to see who is working' : 'Click a shift to see who is working or make a request' }}</span>
+        @if (view() !== 'stats') {
+          <span class="text-xs text-slate-400">{{ canEdit ? 'Click a shift to assign people or edit it' : isStaff ? 'Click a shift to see who is working' : 'Click a shift to see who is working or make a request' }}</span>
+        }
         @if (!isStaff) {
           <button type="button" (click)="showAll.set(!showAll())" class="h-8 px-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 cursor-pointer" data-testid="show-all" [attr.aria-pressed]="showAll()">{{ showAll() ? 'Show only my shifts' : 'Show all shifts' }}</button>
         }
         <div class="inline-flex rounded-lg border border-slate-300 overflow-hidden" role="group" aria-label="Schedule layout">
           <button type="button" (click)="setView('grid')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'grid' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-grid" [attr.aria-pressed]="view() === 'grid'">Grid</button>
           <button type="button" (click)="setView('list')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'list' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-list" [attr.aria-pressed]="view() === 'list'">List</button>
+          <button type="button" (click)="setView('stats')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'stats' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-stats" [attr.aria-pressed]="view() === 'stats'">Stats</button>
         </div>
       </div>
     </div>
@@ -500,6 +512,343 @@
         @if (!loading() && visibleShifts().length === 0) {
           <p class="text-center text-sm text-slate-500" data-testid="no-shifts">{{ emptyText }}</p>
         }
+      </div>
+    } @else if (view() === 'stats') {
+      <div class="p-5 space-y-8" data-testid="stats-view">
+        <!-- KPI Summary Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3" data-testid="stats-kpis">
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-slate-500">Weekly Shift Demand</div>
+            <div class="text-2xl font-extrabold text-slate-900 mt-1" data-testid="kpi-total-hours">{{ totalWeekDensityHours() }} <span class="text-xs font-semibold text-slate-500">hrs</span></div>
+            <div class="text-[11px] text-slate-500 mt-0.5">Total shift slot demand</div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-emerald-700">Assigned Hours</div>
+            <div class="text-2xl font-extrabold text-emerald-800 mt-1" data-testid="kpi-assigned-hours">{{ totalWeekAssignedHours() }} <span class="text-xs font-semibold text-emerald-600">hrs</span></div>
+            <div class="text-[11px] text-emerald-700 mt-0.5">{{ totalWeekDensityHours() > 0 ? Math.round((totalWeekAssignedHours() / totalWeekDensityHours()) * 100) : 0 }}% filled ({{ scheduledSlots() }} slot{{ scheduledSlots() === 1 ? '' : 's' }})</div>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-amber-700">Open Shift Hours</div>
+            <div class="text-2xl font-extrabold text-amber-800 mt-1" data-testid="kpi-open-hours">{{ totalWeekOpenHours() }} <span class="text-xs font-semibold text-amber-600">hrs</span></div>
+            <div class="text-[11px] text-amber-700 mt-0.5">{{ openSlots() }} slot{{ openSlots() === 1 ? '' : 's' }} waiting for staff</div>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-blue-700">Active Staff</div>
+            <div class="text-2xl font-extrabold text-blue-900 mt-1" data-testid="kpi-active-staff">{{ scheduledEmployeeCount() }} <span class="text-xs font-semibold text-blue-600">/ {{ totalEmployeeCount() }}</span></div>
+            <div class="text-[11px] text-blue-700 mt-0.5">Avg {{ averageEmployeeHours() }} hrs / active</div>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 shadow-xs col-span-2 md:col-span-4 lg:col-span-1">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-slate-500">Peak Shift Day</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-1 truncate" data-testid="kpi-peak-day">
+              {{ busiestDay() ? busiestDay()?.long : 'None' }}
+            </div>
+            <div class="text-[11px] text-slate-500 mt-0.5">
+              {{ busiestDay() ? (busiestDay()?.totalHours + ' hrs scheduled') : 'No shifts this week' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 1. Daily Shift Hours Density (Weekly Graph) -->
+        <section class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs" data-testid="daily-density-graph">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                </svg>
+                Daily Shift Hours Density (Weekly Graph)
+              </h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Total scheduled shift hours per day across the week (regardless of assigned employee)
+              </p>
+            </div>
+            <!-- Legend -->
+            <div class="flex items-center gap-4 text-xs font-medium">
+              <span class="flex items-center gap-1.5 text-slate-700">
+                <span class="w-3.5 h-3.5 rounded bg-brand-600 inline-block"></span> Assigned hours
+              </span>
+              <span class="flex items-center gap-1.5 text-slate-700">
+                <span class="w-3.5 h-3.5 rounded bg-amber-400 inline-block"></span> Open shift hours
+              </span>
+            </div>
+          </div>
+
+          <!-- Vertical Bar Chart Canvas -->
+          <div class="relative pt-6 pb-2">
+            <!-- Background horizontal reference grid lines -->
+            <div class="absolute inset-0 flex flex-col justify-between pointer-events-none pb-14 pt-6">
+              @for (tick of dailyDensityTicks(); track tick.percent) {
+                <div class="w-full flex items-center text-[10px] text-slate-400">
+                  <span class="w-8 text-right pr-2 font-mono">{{ tick.label }}</span>
+                  <div class="flex-1 border-b border-slate-100 border-dashed"></div>
+                </div>
+              }
+            </div>
+
+            <!-- 7 Columns Grid -->
+            <div class="grid grid-cols-7 gap-2 sm:gap-4 relative z-10 pl-8 h-64 items-end">
+              @for (day of dayDensityStats(); track day.iso) {
+                <div class="flex flex-col items-center h-full justify-end group">
+                  <!-- Floating hours badge above bar -->
+                  <div class="mb-2 text-xs font-bold transition-transform group-hover:scale-110"
+                       [class.text-brand-700]="day.today"
+                       [class.text-slate-700]="!day.today">
+                    {{ day.totalHours > 0 ? day.totalHours + 'h' : '0h' }}
+                  </div>
+
+                  <!-- Bar Track -->
+                  <div class="w-full max-w-[56px] h-44 bg-slate-100/70 rounded-xl relative flex flex-col justify-end overflow-hidden p-1 transition-all group-hover:bg-slate-200/60"
+                       [title]="day.long + ': ' + day.totalHours + ' hrs (' + day.assignedHours + 'h assigned, ' + day.openHours + 'h open)'">
+                    @if (day.totalHours > 0) {
+                      <div class="w-full rounded-lg overflow-hidden flex flex-col justify-end transition-all duration-500 shadow-xs"
+                           [style.height.%]="Math.max(10, (day.totalHours / maxDailyDensityHours()) * 100)">
+                        <!-- Open Hours portion (top of stack) -->
+                        @if (day.openHours > 0) {
+                          <div class="w-full bg-amber-400 transition-all duration-300"
+                               [style.height.%]="(day.openHours / day.totalHours) * 100"
+                               title="{{ day.openHours }} hrs open"></div>
+                        }
+                        <!-- Assigned Hours portion (bottom of stack) -->
+                        @if (day.assignedHours > 0) {
+                          <div class="w-full bg-brand-600 transition-all duration-300"
+                               [style.height.%]="(day.assignedHours / day.totalHours) * 100"
+                               title="{{ day.assignedHours }} hrs assigned"></div>
+                        }
+                      </div>
+                    } @else {
+                      <div class="w-full h-1 bg-slate-300 rounded-full my-auto self-center opacity-60"></div>
+                    }
+                  </div>
+
+                  <!-- X-Axis Label -->
+                  <div class="mt-3 text-center">
+                    <div class="text-[11px] font-bold tracking-wider uppercase"
+                         [class.text-brand-700]="day.today"
+                         [class.text-slate-500]="!day.today">
+                      {{ day.short }}
+                    </div>
+                    <div class="inline-flex items-center justify-center text-xs font-extrabold mt-0.5"
+                         [class]="day.today ? 'w-6 h-6 rounded-full bg-brand-600 text-white shadow-xs' : 'text-slate-900'">
+                      {{ day.num }}
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">
+                      {{ day.shiftCount }} shift{{ day.shiftCount === 1 ? '' : 's' }}
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Daily Breakdown Cards Strip -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-4 border-t border-slate-100 mt-2">
+            @for (day of dayDensityStats(); track day.iso) {
+              <div class="p-2.5 rounded-xl border text-center transition-colors"
+                   [class]="day.today ? 'bg-brand-50/70 border-brand-200' : 'bg-slate-50/60 border-slate-200/80'">
+                <div class="text-xs font-bold text-slate-800">{{ day.short }} {{ day.num }}</div>
+                <div class="text-sm font-extrabold text-slate-900 mt-0.5">{{ day.totalHours }} <span class="text-[10px] font-normal text-slate-500">hrs</span></div>
+                <div class="text-[11px] text-slate-600 mt-1 space-y-0.5">
+                  <div class="text-emerald-700 font-medium">{{ day.assignedHours }}h assigned</div>
+                  @if (day.openHours > 0) {
+                    <div class="text-amber-700 font-semibold">{{ day.openHours }}h open</div>
+                  } @else if (day.totalHours > 0) {
+                    <div class="text-emerald-600 font-medium text-[10px]">&#10003; 100% staffed</div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </section>
+
+        <!-- 2. Hours Assigned per Employee (Horizontal Histogram / Bar Chart) -->
+        <section class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs" data-testid="employee-histogram">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                </svg>
+                Hours Assigned per Employee
+              </h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Horizontal histogram of scheduled hours per employee for this week (Standard 40h benchmark)
+              </p>
+            </div>
+
+            <!-- Search & Filter Controls -->
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="relative">
+                <input type="text"
+                       [ngModel]="statsSearch()"
+                       (ngModelChange)="statsSearch.set($event)"
+                       name="statsSearch"
+                       placeholder="Filter by name…"
+                       class="h-8 pl-8 pr-3 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 w-40 sm:w-48"
+                       data-testid="stats-search">
+                <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+                </svg>
+                @if (statsSearch()) {
+                  <button type="button" (click)="statsSearch.set('')" class="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold">&times;</button>
+                }
+              </div>
+
+              <div class="inline-flex rounded-lg border border-slate-300 overflow-hidden text-xs" role="group">
+                <button type="button"
+                        (click)="statsFilter.set('all')"
+                        [class]="'h-8 px-2.5 font-semibold cursor-pointer ' + (statsFilter() === 'all' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')"
+                        data-testid="filter-all">
+                  All ({{ totalEmployeeCount() }})
+                </button>
+                <button type="button"
+                        (click)="statsFilter.set('scheduled')"
+                        [class]="'h-8 px-2.5 font-semibold cursor-pointer ' + (statsFilter() === 'scheduled' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')"
+                        data-testid="filter-scheduled">
+                  Scheduled ({{ scheduledEmployeeCount() }})
+                </button>
+                <button type="button"
+                        (click)="statsFilter.set('unassigned')"
+                        [class]="'h-8 px-2.5 font-semibold cursor-pointer ' + (statsFilter() === 'unassigned' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')"
+                        data-testid="filter-unassigned">
+                  0 hrs ({{ totalEmployeeCount() - scheduledEmployeeCount() }})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Histogram Container -->
+          <div class="space-y-3">
+            <!-- Scale Ruler Header -->
+            <div class="flex items-center gap-3 pl-44 sm:pl-56 pr-24 sm:pr-28 text-[11px] text-slate-400 border-b border-slate-100 pb-1.5 font-mono select-none">
+              <div class="flex-1 relative h-4">
+                @for (tick of employeeHistogramTicks(); track tick.hour) {
+                  <div class="absolute -translate-x-1/2 flex flex-col items-center" [style.left.%]="tick.percent">
+                    <span>{{ tick.hour }}h</span>
+                  </div>
+                }
+                <!-- 40h Full-Time Indicator Tag -->
+                @if (maxEmployeeHours() >= 40) {
+                  <div class="absolute -translate-x-1/2 -top-1" [style.left.%]="(40 / maxEmployeeHours()) * 100">
+                    <span class="px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase tracking-wider">40h standard</span>
+                  </div>
+                }
+              </div>
+            </div>
+
+            <!-- Employee Histogram Rows -->
+            @for (emp of filteredEmployeeStats(); track emp.id) {
+              <div class="rounded-xl border transition-all"
+                   [class]="emp.isCurrentEmployee ? 'bg-brand-50/40 border-brand-300 shadow-xs' : 'bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xs'"
+                   [attr.data-testid]="'emp-row-' + emp.id">
+                <div class="flex items-center gap-3 p-3">
+                  <!-- Col 1: Employee Info -->
+                  <div class="w-40 sm:w-52 flex-shrink-0 flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold flex-shrink-0"
+                         [class]="emp.isCurrentEmployee ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700 border border-slate-200'">
+                      {{ getEmpInitials(emp.name) }}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
+                        <span class="truncate" [title]="emp.name">{{ emp.name }}</span>
+                        @if (emp.isCurrentEmployee) {
+                          <span class="px-1.5 py-0.2 rounded-full bg-brand-100 text-brand-800 text-[10px] font-extrabold">You</span>
+                        }
+                      </div>
+                      <div class="flex flex-wrap items-center gap-1 mt-0.5">
+                        @if (emp.isMinor) {
+                          <span class="px-1 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold border border-yellow-300">Minor</span>
+                        }
+                        @if (emp.hasTimeOffConflict) {
+                          <span class="px-1 rounded bg-rose-100 text-rose-800 text-[10px] font-bold border border-rose-300" title="Assigned on a time-off day">⚠️ Off</span>
+                        }
+                        @if (emp.totalHours > 40) {
+                          <span class="px-1 rounded bg-rose-50 text-rose-700 text-[10px] font-extrabold border border-rose-200">+{{ Math.round((emp.totalHours - 40) * 10) / 10 }}h OT</span>
+                        }
+                        <span class="text-[11px] text-slate-500">{{ emp.shiftCount }} shift{{ emp.shiftCount === 1 ? '' : 's' }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Col 2: Horizontal Bar Track -->
+                  <div class="flex-1 relative h-7 bg-slate-100/90 rounded-lg overflow-hidden flex items-center p-0.5">
+                    <!-- 40h Guideline -->
+                    @if (maxEmployeeHours() >= 40) {
+                      <div class="absolute top-0 bottom-0 border-r-2 border-dashed border-amber-400 z-10 pointer-events-none opacity-80"
+                           [style.left.%]="(40 / maxEmployeeHours()) * 100"
+                           title="40 hours standard full-time"></div>
+                    }
+
+                    <!-- Filled Horizontal Bar -->
+                    @if (emp.totalHours > 0) {
+                      <div class="h-full rounded-md transition-all duration-500 flex items-center relative shadow-xs"
+                           [style.width.%]="Math.min(100, (emp.totalHours / maxEmployeeHours()) * 100)"
+                           [class]="emp.totalHours > 40
+                             ? 'bg-gradient-to-r from-amber-500 to-rose-600'
+                             : emp.totalHours >= 30
+                               ? 'bg-gradient-to-r from-brand-600 to-indigo-600'
+                               : 'bg-gradient-to-r from-sky-500 to-brand-500'">
+                        @if ((emp.totalHours / maxEmployeeHours()) >= 0.14) {
+                          <span class="text-white text-xs font-bold pl-2 truncate select-none">{{ emp.totalHours }}h</span>
+                        }
+                      </div>
+                      @if ((emp.totalHours / maxEmployeeHours()) < 0.14) {
+                        <span class="text-slate-800 text-xs font-extrabold pl-2 select-none">{{ emp.totalHours }}h</span>
+                      }
+                    } @else {
+                      <span class="text-slate-400 text-xs font-normal pl-2 select-none italic">0 hours assigned</span>
+                    }
+                  </div>
+
+                  <!-- Col 3: Hours Summary & Expand Shifts Button -->
+                  <div class="w-24 sm:w-28 flex-shrink-0 flex items-center justify-end gap-2 text-right">
+                    <div>
+                      <div class="text-sm font-extrabold text-slate-900" [attr.data-testid]="'emp-hours-' + emp.id">
+                        {{ emp.totalHours }} <span class="text-[11px] font-normal text-slate-500">hrs</span>
+                      </div>
+                    </div>
+                    @if (emp.shifts.length > 0) {
+                      <button type="button"
+                              (click)="toggleExpandEmp(emp.id)"
+                              class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer text-xs font-bold transition-transform"
+                              [class.rotate-180]="expandedEmpId() === emp.id"
+                              title="Show assigned shifts">
+                        ▼
+                      </button>
+                    }
+                  </div>
+                </div>
+
+                <!-- Expanded Shift Details for this Employee -->
+                @if (expandedEmpId() === emp.id && emp.shifts.length > 0) {
+                  <div class="px-4 pb-3 pt-1 border-t border-slate-100 bg-slate-50/70 rounded-b-xl space-y-1.5"
+                       [attr.data-testid]="'emp-shifts-' + emp.id">
+                    <div class="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Scheduled Shifts ({{ emp.shifts.length }}):</div>
+                    <div class="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                      @for (s of emp.shifts; track $index) {
+                        <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                          <div>
+                            <span class="font-bold text-slate-800">{{ s.name }}</span>
+                            <div class="text-[11px] text-slate-500">{{ dayName(s.date) }} {{ s.date }}</div>
+                          </div>
+                          <span class="font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded text-[11px]">
+                            {{ timeRange(s) }}
+                          </span>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (filteredEmployeeStats().length === 0) {
+              <div class="py-8 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-200"
+                   data-testid="no-emp-stats">
+                No employees match the selected filter or search.
+              </div>
+            }
+          </div>
+        </section>
       </div>
     } @else {
     <div class="overflow-x-auto p-4">

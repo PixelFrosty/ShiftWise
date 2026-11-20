@@ -14,13 +14,22 @@ const DAY_SHORT = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 const DAY_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function loadView(): 'grid' | 'list' {
-  try { return localStorage.getItem('shiftwise.scheduleView') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; }
+function loadView(): 'grid' | 'list' | 'stats' {
+  try {
+    const val = localStorage.getItem('shiftwise.scheduleView');
+    return val === 'list' || val === 'stats' ? val : 'grid';
+  } catch { return 'grid'; }
 }
 
 export function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
+}
+
+export function shiftDurationMinutes(start: string, end: string): number {
+  const s = toMinutes(start);
+  const e = toMinutes(end);
+  return e >= s ? e - s : (e + 24 * 60) - s;
 }
 
 export function prettyTime(hhmm: string): string {
@@ -34,6 +43,33 @@ export function prettyTime(hhmm: string): string {
 export interface DayColumn { iso: string; short: string; long: string; num: number; today: boolean; }
 
 export interface PlacedShift { shift: Shift; top: number; height: number; left: number; width: number; }
+
+export interface EmployeeHoursStat {
+  id: number;
+  name: string;
+  isMinor: boolean;
+  totalMinutes: number;
+  totalHours: number;
+  shiftCount: number;
+  shifts: { date: string; start_time: string; end_time: string; name: string }[];
+  hasTimeOffConflict: boolean;
+  isCurrentEmployee: boolean;
+}
+
+export interface DayDensityStat {
+  iso: string;
+  short: string;
+  long: string;
+  num: number;
+  today: boolean;
+  totalHours: number;
+  assignedHours: number;
+  openHours: number;
+  shiftCount: number;
+  slotCount: number;
+  assignedSlotCount: number;
+  openSlotCount: number;
+}
 
 type Panel = null | 'shift' | 'add' | 'templates' | 'hours';
 type RequestMode = null | { kind: 'give' | 'take' | 'swap'; person?: ShiftPerson };
@@ -60,8 +96,8 @@ export class WeeklyScheduleComponent implements OnDestroy {
   private managedIds = new Set<number>();
   deptId: number | null = null;
 
-  /** Grid (hour-by-hour columns) or List (one card per shift under each day) - the list is easier to read when shifts overlap. */
-  view = signal<'grid' | 'list'>(loadView());
+  /** Grid (hour-by-hour columns), List (one card per shift), or Stats (hours histograms & density charts). */
+  view = signal<'grid' | 'list' | 'stats'>(loadView());
   /** Is this department-week posted? Null until loaded. Drafts are only visible to managers. */
   pub = signal<Publication | null>(null);
   /** Step 1 of posting: the review of the week. Step 2 (postConfirm): the final "are you sure". */
@@ -347,13 +383,235 @@ export class WeeklyScheduleComponent implements OnDestroy {
   iAmOn(s: Shift): boolean { return s.assignments.some(a => this.isMine(a)); }
   timeRange(s: { start_time: string; end_time: string }): string { return `${prettyTime(s.start_time)} – ${prettyTime(s.end_time)}`; }
 
+  // --- Stats View Signals & Helpers ---
+  readonly Math = Math;
+  statsFilter = signal<'all' | 'scheduled' | 'unassigned'>('all');
+  statsSearch = signal<string>('');
+  expandedEmpId = signal<number | null>(null);
+
+  toggleExpandEmp(empId: number): void {
+    this.expandedEmpId.set(this.expandedEmpId() === empId ? null : empId);
+  }
+
+  getEmpInitials(name: string): string {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  dayDensityStats = computed<DayDensityStat[]>(() => {
+    const allShifts = this.shifts();
+    return this.days().map(day => {
+      const dayShifts = allShifts.filter(s => s.shift_date === day.iso);
+      let totalMinutes = 0;
+      let assignedMinutes = 0;
+      let openMinutes = 0;
+      let slotCount = 0;
+      let assignedSlotCount = 0;
+      let openSlotCount = 0;
+
+      for (const s of dayShifts) {
+        const duration = Math.max(0, shiftDurationMinutes(s.start_time, s.end_time));
+        const headcount = Math.max(1, s.headcount ?? 1);
+        const assigned = (s.assignments || []).length;
+        const open = Math.max(0, headcount - assigned);
+
+        totalMinutes += duration * headcount;
+        assignedMinutes += duration * assigned;
+        openMinutes += duration * open;
+
+        slotCount += headcount;
+        assignedSlotCount += assigned;
+        openSlotCount += open;
+      }
+
+      return {
+        iso: day.iso,
+        short: day.short,
+        long: day.long,
+        num: day.num,
+        today: day.today,
+        totalHours: Math.round((totalMinutes / 60) * 10) / 10,
+        assignedHours: Math.round((assignedMinutes / 60) * 10) / 10,
+        openHours: Math.round((openMinutes / 60) * 10) / 10,
+        shiftCount: dayShifts.length,
+        slotCount,
+        assignedSlotCount,
+        openSlotCount,
+      };
+    });
+  });
+
+  maxDailyDensityHours = computed(() => {
+    const list = this.dayDensityStats();
+    const max = Math.max(0, ...list.map(d => d.totalHours));
+    return max > 0 ? max : 8;
+  });
+
+  dailyDensityTicks = computed(() => {
+    const max = this.maxDailyDensityHours();
+    return [
+      { label: `${Math.round(max)}h`, percent: 100 },
+      { label: `${Math.round(max * 0.75)}h`, percent: 75 },
+      { label: `${Math.round(max * 0.5)}h`, percent: 50 },
+      { label: `${Math.round(max * 0.25)}h`, percent: 25 },
+      { label: '0h', percent: 0 },
+    ];
+  });
+
+  totalWeekDensityHours = computed(() => {
+    const list = this.dayDensityStats();
+    const sum = list.reduce((acc, d) => acc + d.totalHours, 0);
+    return Math.round(sum * 10) / 10;
+  });
+
+  totalWeekAssignedHours = computed(() => {
+    const list = this.dayDensityStats();
+    const sum = list.reduce((acc, d) => acc + d.assignedHours, 0);
+    return Math.round(sum * 10) / 10;
+  });
+
+  totalWeekOpenHours = computed(() => {
+    const list = this.dayDensityStats();
+    const sum = list.reduce((acc, d) => acc + d.openHours, 0);
+    return Math.round(sum * 10) / 10;
+  });
+
+  busiestDay = computed(() => {
+    const list = this.dayDensityStats();
+    if (!list.length) return null;
+    let best = list[0];
+    for (const d of list) {
+      if (d.totalHours > best.totalHours) {
+        best = d;
+      }
+    }
+    return best.totalHours > 0 ? best : null;
+  });
+
+  employeeHoursStats = computed<EmployeeHoursStat[]>(() => {
+    const allShifts = this.shifts();
+    const peopleMap = new Map<number, EmployeeHoursStat>();
+
+    // Seed from deptPeople
+    for (const p of this.deptPeople()) {
+      peopleMap.set(p.id, {
+        id: p.id,
+        name: p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || `Employee #${p.id}`,
+        isMinor: !!p.is_minor,
+        totalMinutes: 0,
+        totalHours: 0,
+        shiftCount: 0,
+        shifts: [],
+        hasTimeOffConflict: false,
+        isCurrentEmployee: p.id === this.myProfileId,
+      });
+    }
+
+    // Accumulate from shifts
+    for (const s of allShifts) {
+      const duration = Math.max(0, shiftDurationMinutes(s.start_time, s.end_time));
+      for (const a of s.assignments || []) {
+        let stat = peopleMap.get(a.employee_id);
+        if (!stat) {
+          stat = {
+            id: a.employee_id,
+            name: a.name || `Employee #${a.employee_id}`,
+            isMinor: !!a.is_minor,
+            totalMinutes: 0,
+            totalHours: 0,
+            shiftCount: 0,
+            shifts: [],
+            hasTimeOffConflict: false,
+            isCurrentEmployee: a.employee_id === this.myProfileId,
+          };
+          peopleMap.set(a.employee_id, stat);
+        }
+        stat.totalMinutes += duration;
+        stat.shiftCount += 1;
+        stat.shifts.push({
+          date: s.shift_date,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          name: s.name || 'Shift',
+        });
+        if (this.hasTimeOff(a.employee_id, s.shift_date)) {
+          stat.hasTimeOffConflict = true;
+        }
+      }
+    }
+
+    const list = Array.from(peopleMap.values()).map(stat => ({
+      ...stat,
+      totalHours: Math.round((stat.totalMinutes / 60) * 10) / 10,
+    }));
+
+    return list.sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name));
+  });
+
+  filteredEmployeeStats = computed(() => {
+    const filter = this.statsFilter();
+    const query = this.statsSearch().trim().toLowerCase();
+    let list = this.employeeHoursStats();
+
+    if (filter === 'scheduled') {
+      list = list.filter(e => e.totalHours > 0);
+    } else if (filter === 'unassigned') {
+      list = list.filter(e => e.totalHours === 0);
+    }
+
+    if (query) {
+      list = list.filter(e => e.name.toLowerCase().includes(query));
+    }
+
+    return list;
+  });
+
+  maxEmployeeHours = computed(() => {
+    const list = this.employeeHoursStats();
+    const max = Math.max(0, ...list.map(e => e.totalHours));
+    return Math.max(40, Math.ceil(max / 10) * 10);
+  });
+
+  employeeHistogramTicks = computed(() => {
+    const max = this.maxEmployeeHours();
+    const step = max <= 50 ? 10 : 20;
+    const ticks: { hour: number; percent: number }[] = [];
+    for (let h = 0; h <= max; h += step) {
+      ticks.push({ hour: h, percent: (h / max) * 100 });
+    }
+    return ticks;
+  });
+
+  scheduledEmployeeCount = computed(() => {
+    return this.employeeHoursStats().filter(e => e.totalHours > 0).length;
+  });
+
+  totalEmployeeCount = computed(() => {
+    return this.employeeHoursStats().length;
+  });
+
+  averageEmployeeHours = computed(() => {
+    const active = this.employeeHoursStats().filter(e => e.totalHours > 0);
+    if (!active.length) return 0;
+    const sum = active.reduce((acc, e) => acc + e.totalHours, 0);
+    return Math.round((sum / active.length) * 10) / 10;
+  });
+
+  overtimeEmployeeCount = computed(() => {
+    return this.employeeHoursStats().filter(e => e.totalHours > 40).length;
+  });
+
   // --- loading ---
   goToWeek(delta: number): void { this.router.navigate(['/schedules/week', toIso(addDays(this.monday, delta * 7))]); }
   changeDepartment(): void { this.closePanel(); this.reload(); if (this.canEdit) { this.loadStaffData(); } }
 
   runs(id: number): boolean { return this.managedIds.has(id); }
 
-  setView(v: 'grid' | 'list'): void {
+  setView(v: 'grid' | 'list' | 'stats'): void {
     this.view.set(v);
     try { localStorage.setItem('shiftwise.scheduleView', v); } catch { /* storage may be blocked */ }
   }
@@ -395,6 +653,12 @@ export class WeeklyScheduleComponent implements OnDestroy {
       next: list => this.weekTimeOff.set(list),
       error: () => this.weekTimeOff.set([])
     });
+    if (!this.deptPeople().length) {
+      this.api.employees().subscribe({
+        next: list => this.deptPeople.set(list),
+        error: () => {}
+      });
+    }
     // an employee loads every department they may see at once, so extra departments add into the hours card
     this.api.shifts(this.isStaff ? dept : null, toIso(this.monday), toIso(addDays(this.monday, 6))).subscribe({
       next: list => {
