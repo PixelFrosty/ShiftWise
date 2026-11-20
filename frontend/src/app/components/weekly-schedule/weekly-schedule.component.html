@@ -24,27 +24,129 @@
     </div>
   </div>
 
-  <!-- Staff toolbar -->
-  <div class="flex flex-wrap items-center gap-3 mb-5">
-    @if (departments.length > 0) {
-      <label for="dept-select" class="text-sm font-semibold text-slate-700">Department</label>
-      <select id="dept-select" [(ngModel)]="deptId" (ngModelChange)="changeDepartment()" name="deptSelect" class="h-9 border border-slate-300 rounded-md px-2 bg-white text-sm" data-testid="dept-select">
-        <option [ngValue]="null">All departments</option>
-        @for (d of departments; track d.id) { <option [ngValue]="d.id">{{ d.name }}{{ isStaff && !runs(d.id) ? ' (view only)' : '' }}{{ !isStaff && d.id === homeId ? ' (home)' : '' }}</option> }
-      </select>
-    }
-    @if (canEdit) {
-      <button type="button" (click)="openAdd()" class="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer" data-testid="add-shift">+ Add shift</button>
-      <button type="button" (click)="openTemplates()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="templates">Shift templates</button>
+  <!-- 1. Dedicated Filtering Line -->
+  <div class="bg-white border border-slate-200 rounded-2xl p-3.5 mb-4 shadow-2xs flex flex-wrap items-center justify-between gap-3" data-testid="filtering-toolbar">
+    <!-- Department Multi-select Filtering -->
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mr-1">
+        <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.41A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z"/>
+        </svg>
+        <span>Departments:</span>
+      </div>
+
+      <!-- "All Departments" pill -->
+      <button type="button"
+              (click)="toggleDept(null)"
+              class="h-9 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              [class]="selectedDeptIds().length === 0 ? 'bg-brand-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'"
+              data-testid="dept-pill-all">
+        All
+      </button>
+
+      <!-- Department multi-select pills -->
+      @for (d of departments; track d.id) {
+        <button type="button"
+                (click)="toggleDept(d.id)"
+                class="h-9 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5"
+                [class]="isDeptSelected(d.id)
+                  ? 'bg-brand-600 text-white shadow-xs ring-1 ring-brand-700'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-transparent'"
+                [attr.data-testid]="'dept-pill-' + d.id"
+                [attr.aria-pressed]="isDeptSelected(d.id)">
+          @if (isDeptSelected(d.id)) {
+            <span class="text-[10px]">&#10003;</span>
+          }
+          <span>{{ d.name }}</span>
+          @if (isStaff && !runs(d.id)) {
+            <span class="text-[9px] opacity-75 font-normal">(view only)</span>
+          }
+          @if (!isStaff && d.id === homeId) {
+            <span class="text-[9px] opacity-75 font-normal">(home)</span>
+          }
+        </button>
+      }
+
+      @if (selectedDeptIds().length > 1) {
+        <span class="text-xs font-medium text-slate-500 bg-slate-100 rounded-lg px-2 py-1">
+          {{ selectedDeptIds().length }} selected
+        </span>
+      }
+
+      <!-- Select dropdown for quick selection / testing fallback -->
+      @if (departments.length > 0) {
+        <select id="dept-select"
+                [(ngModel)]="deptId"
+                (ngModelChange)="onDeptDropdownChange($event)"
+                name="deptSelect"
+                class="sr-only"
+                data-testid="dept-select"
+                aria-label="Department selection dropdown">
+          <option [ngValue]="null">All departments</option>
+          @for (d of departments; track d.id) {
+            <option [ngValue]="d.id">{{ d.name }}{{ isStaff && !runs(d.id) ? ' (view only)' : '' }}{{ !isStaff && d.id === homeId ? ' (home)' : '' }}</option>
+          }
+        </select>
+      }
+    </div>
+
+    <!-- Search Bar on dedicated filtering line -->
+    <div class="flex items-center gap-2">
+      <div class="relative">
+        <input type="text"
+               [ngModel]="scheduleSearch()"
+               (ngModelChange)="scheduleSearch.set($event)"
+               name="scheduleSearch"
+               placeholder="Search shifts, staff, tasks…"
+               class="h-9 pl-8 pr-7 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 w-52 sm:w-64"
+               data-testid="schedule-search">
+        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+        </svg>
+        @if (scheduleSearch()) {
+          <button type="button"
+                  (click)="scheduleSearch.set('')"
+                  class="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                  title="Clear search">&times;</button>
+        }
+      </div>
+
+      @if (scheduleSearch() || selectedDeptIds().length > 0) {
+        <button type="button"
+                (click)="resetFilters()"
+                class="h-9 px-2.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 text-xs font-medium cursor-pointer"
+                title="Reset all filters"
+                data-testid="reset-filters">
+          Reset
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- 2. Management & Generation Toolbar (Same Line: Add shift, Generation, Assignment, Templates, Hours) -->
+  @if (canEdit) {
+    <div class="flex flex-wrap items-center gap-2.5 mb-2.5" data-testid="management-actions-row">
+      <button type="button" (click)="openAdd()" class="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer shadow-xs" data-testid="add-shift">+ Add shift</button>
       <button type="button" (click)="openShiftGeneration()" class="h-9 px-4 rounded-lg border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-semibold cursor-pointer" data-testid="shift-generation" title="Generate weekly shifts from tasks">Smart Shift Generation</button>
       <button type="button" (click)="openShiftAssignment()" class="h-9 px-4 rounded-lg border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-semibold cursor-pointer" data-testid="shift-assignment" [attr.data-testid]="'auto-schedule'" title="Assign employees to open shift slots">Smart Shift Assignment</button>
-      <button type="button" (click)="openClearAssignments()" class="h-9 px-4 rounded-lg border border-rose-300 text-rose-700 hover:bg-rose-50 text-sm font-semibold cursor-pointer" data-testid="clear-assignments" title="Unassign all employees from shifts this week">Clear all assignments</button>
-      <button type="button" (click)="openClearShifts()" class="h-9 px-4 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 text-sm font-semibold cursor-pointer" data-testid="clear-shifts" title="Delete all shift entries for this week">Clear all shifts</button>
+      <button type="button" (click)="openTemplates()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="templates">Shift templates</button>
       @if (isCeo) {
         <button type="button" (click)="openHours()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="hours">Hours of operation</button>
       }
-    }
-  </div>
+    </div>
+
+    <!-- 3. Clear / Reset Actions (Dedicated Separate Line for Clarity) -->
+    <div class="flex flex-wrap items-center gap-2.5 mb-5 pt-0.5" data-testid="clear-actions-row">
+      <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mr-1 select-none">
+        <svg class="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        Reset:
+      </span>
+      <button type="button" (click)="openClearAssignments()" class="h-9 px-3.5 rounded-lg border border-rose-300 text-rose-700 bg-rose-50/50 hover:bg-rose-100/70 text-xs font-semibold cursor-pointer transition-colors" data-testid="clear-assignments" title="Unassign all employees from shifts this week">Clear all assignments</button>
+      <button type="button" (click)="openClearShifts()" class="h-9 px-3.5 rounded-lg border border-red-300 text-red-700 bg-red-50/50 hover:bg-red-100/70 text-xs font-semibold cursor-pointer transition-colors" data-testid="clear-shifts" title="Delete all shift entries for this week">Clear all shifts</button>
+    </div>
+  }
 
   @if (clearSuccess) {
     <div class="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-sm flex items-center justify-between" data-testid="clear-success">
@@ -724,12 +826,6 @@
                 @for (tick of employeeHistogramTicks(); track tick.hour) {
                   <div class="absolute -translate-x-1/2 flex flex-col items-center" [style.left.%]="tick.percent">
                     <span>{{ tick.hour }}h</span>
-                  </div>
-                }
-                <!-- 40h Full-Time Indicator Tag -->
-                @if (maxEmployeeHours() >= 40) {
-                  <div class="absolute -translate-x-1/2 -top-1" [style.left.%]="(40 / maxEmployeeHours()) * 100">
-                    <span class="px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase tracking-wider">40h standard</span>
                   </div>
                 }
               </div>

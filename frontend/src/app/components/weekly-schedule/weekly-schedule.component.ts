@@ -95,6 +95,8 @@ export class WeeklyScheduleComponent implements OnDestroy {
   /** Departments this person runs. Managers and General Managers can also look at the others (view only). */
   private managedIds = new Set<number>();
   deptId: number | null = null;
+  selectedDeptIds = signal<number[]>([]);
+  scheduleSearch = signal<string>('');
 
   /** Grid (hour-by-hour columns), List (one card per shift), or Stats (hours histograms & density charts). */
   view = signal<'grid' | 'list' | 'stats'>(loadView());
@@ -194,6 +196,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
       const mine = profile.can_edit_schedule ? profile.managed_departments : [profile.department, ...(profile.extra_departments ?? [])];
       this.departments = mine.length ? mine : [profile.department];
       this.deptId = this.departments.find(d => d.id === profile.department.id)?.id ?? this.departments[0]?.id ?? null;
+      if (this.deptId !== null) { this.selectedDeptIds.set([this.deptId]); }
       if (profile.can_edit_schedule) {
         // add every other department of the company after the ones they run
         this.api.departments().subscribe(all => {
@@ -210,6 +213,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
             const mine = p.can_edit_schedule ? p.managed_departments : [p.department, ...(p.extra_departments ?? [])];
             this.departments = mine.length ? mine : [p.department];
             this.deptId = this.departments.find(d => d.id === p.department.id)?.id ?? this.departments[0]?.id ?? null;
+            if (this.deptId !== null) { this.selectedDeptIds.set([this.deptId]); }
             if (p.can_edit_schedule) {
               this.api.departments().subscribe(all => {
                 const own = new Set(this.departments.map(d => d.id));
@@ -225,6 +229,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
             if (all.length > 0) {
               this.departments = all.map(d => ({ id: d.id, name: d.name }));
               if (this.deptId === null) { this.deptId = all[0].id; }
+              if (this.deptId !== null) { this.selectedDeptIds.set([this.deptId]); }
               this.managedIds.add(all[0].id);
               this.loadStaffData();
               this.reload();
@@ -251,9 +256,65 @@ export class WeeklyScheduleComponent implements OnDestroy {
   /** Manager or General Manager (may look at every department). */
   get isStaff(): boolean { return !!this.me?.profile?.can_edit_schedule; }
   /** Staff may change only the departments they run; other departments are view only. When all departments is chosen, staff can edit. */
-  get canEdit(): boolean { return this.isStaff && (this.deptId === null || this.managedIds.has(this.deptId)); }
+  get canEdit(): boolean {
+    if (!this.isStaff) return false;
+    const sel = this.selectedDeptIds();
+    if (sel.length === 0) return this.deptId === null || this.managedIds.has(this.deptId);
+    return sel.every(id => this.managedIds.has(id));
+  }
   get isCeo(): boolean { return this.me?.profile?.role === 'ceo'; }
-  get deptName(): string { return this.deptId === null ? 'All' : (this.departments.find(d => d.id === this.deptId)?.name ?? ''); }
+  get deptName(): string {
+    const sel = this.selectedDeptIds();
+    if (sel.length === 0) return this.deptId === null ? 'All' : (this.departments.find(d => d.id === this.deptId)?.name ?? '');
+    if (sel.length === 1) return this.departments.find(d => d.id === sel[0])?.name ?? 'Department';
+    const names = this.departments.filter(d => sel.includes(d.id)).map(d => d.name);
+    return names.join(', ');
+  }
+
+  isDeptSelected(id: number): boolean {
+    return this.selectedDeptIds().includes(id);
+  }
+
+  toggleDept(id: number | null): void {
+    if (id === null) {
+      this.selectedDeptIds.set([]);
+      this.deptId = null;
+    } else {
+      const current = this.selectedDeptIds();
+      if (current.includes(id)) {
+        const next = current.filter(x => x !== id);
+        this.selectedDeptIds.set(next);
+        this.deptId = next.length === 1 ? next[0] : null;
+      } else {
+        const next = [...current, id];
+        if (next.length === this.departments.length) {
+          this.selectedDeptIds.set([]);
+          this.deptId = null;
+        } else {
+          this.selectedDeptIds.set(next);
+          this.deptId = next.length === 1 ? next[0] : null;
+        }
+      }
+    }
+    this.closePanel();
+    this.reload();
+    if (this.canEdit) { this.loadStaffData(); }
+  }
+
+  onDeptDropdownChange(newDeptId: number | null): void {
+    this.deptId = newDeptId;
+    this.selectedDeptIds.set(newDeptId !== null ? [newDeptId] : []);
+    this.changeDepartment();
+  }
+
+  resetFilters(): void {
+    this.selectedDeptIds.set([]);
+    this.deptId = null;
+    this.scheduleSearch.set('');
+    this.closePanel();
+    this.reload();
+  }
+
   get rangeLabel(): string { return formatWeekRange(this.monday); }
 
   get shortRange(): string {
@@ -298,10 +359,39 @@ export class WeeklyScheduleComponent implements OnDestroy {
   }
   get gridHeight(): number { return ((this.gridEndMin - this.gridStartMin) / 60) * HOUR_PX; }
 
-  /** What is drawn: everything, except that an employee starts with only the shifts they are on. */
+  /** What is drawn: filtered by employee, department(s), and search query. */
   visibleShifts = computed(() => {
-    const all = this.shifts();
-    return this.isStaff || this.showAll() ? all : all.filter(s => this.iAmOn(s));
+    let list = this.shifts();
+
+    // 1. Employee restriction
+    if (!this.isStaff && !this.showAll()) {
+      list = list.filter(s => this.iAmOn(s));
+    }
+
+    // 2. Department multi-select filtering
+    const selDepts = this.selectedDeptIds();
+    if (selDepts.length > 0) {
+      const set = new Set(selDepts);
+      list = list.filter(s => {
+        const sDeptId = typeof s.department === 'object' && s.department !== null ? s.department.id : Number(s.department);
+        return set.has(sDeptId);
+      });
+    }
+
+    // 3. Search query filtering
+    const query = this.scheduleSearch().trim().toLowerCase();
+    if (query) {
+      list = list.filter(s => {
+        if (s.name && s.name.toLowerCase().includes(query)) return true;
+        const dName = typeof s.department === 'object' && s.department !== null ? s.department.name : '';
+        if (dName && dName.toLowerCase().includes(query)) return true;
+        if (s.assignments && s.assignments.some(a => a.name && a.name.toLowerCase().includes(query))) return true;
+        if (query === 'open' && (s.open_count > 0 || (s.assignments?.length || 0) < (s.headcount || 1))) return true;
+        return false;
+      });
+    }
+
+    return list;
   });
 
   /** Shifts placed in pixel positions per day; overlapping shifts sit side by side. */
@@ -403,7 +493,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
   }
 
   dayDensityStats = computed<DayDensityStat[]>(() => {
-    const allShifts = this.shifts();
+    const allShifts = this.visibleShifts();
     return this.days().map(day => {
       const dayShifts = allShifts.filter(s => s.shift_date === day.iso);
       let totalMinutes = 0;
@@ -493,11 +583,17 @@ export class WeeklyScheduleComponent implements OnDestroy {
   });
 
   employeeHoursStats = computed<EmployeeHoursStat[]>(() => {
-    const allShifts = this.shifts();
+    const allShifts = this.visibleShifts();
     const peopleMap = new Map<number, EmployeeHoursStat>();
 
-    // Seed from deptPeople
+    // Seed from deptPeople (filtered by selectedDeptIds if set)
+    const selDepts = this.selectedDeptIds();
+    const selSet = selDepts.length > 0 ? new Set(selDepts) : null;
     for (const p of this.deptPeople()) {
+      const pDeptId = typeof p.department === 'object' && p.department !== null ? p.department.id : Number(p.department);
+      if (selSet && !selSet.has(pDeptId)) {
+        continue;
+      }
       peopleMap.set(p.id, {
         id: p.id,
         name: p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || `Employee #${p.id}`,
@@ -648,8 +744,8 @@ export class WeeklyScheduleComponent implements OnDestroy {
     if (this.deptId !== null) {
       this.api.publication(this.deptId, toIso(this.monday)).subscribe({ next: p => this.pub.set(p), error: () => this.pub.set(null) });
     }
-    const dept = this.deptId;
-    this.api.timeOff(undefined, toIso(this.monday), toIso(addDays(this.monday, 6)), dept).subscribe({
+    const dept = this.selectedDeptIds().length === 1 ? this.selectedDeptIds()[0] : (this.deptId ?? null);
+    this.api.timeOff(undefined, toIso(this.monday), toIso(addDays(this.monday, 6)), dept ?? undefined).subscribe({
       next: list => this.weekTimeOff.set(list),
       error: () => this.weekTimeOff.set([])
     });
@@ -663,7 +759,7 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.api.shifts(this.isStaff ? dept : null, toIso(this.monday), toIso(addDays(this.monday, 6))).subscribe({
       next: list => {
         this.weekAll.set(list);
-        this.shifts.set(dept === null ? list : (this.isStaff ? list : list.filter(s => s.department.id === dept)));
+        this.shifts.set(list);
         this.loading.set(false); this.loadError.set(''); done?.();
       },
       error: err => { this.loading.set(false); this.loadError.set(errorText(err)); }
@@ -916,10 +1012,12 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.clearError = '';
 
     const companyId = this.auth.me()?.profile?.company?.id ?? 1;
+    const sel = this.selectedDeptIds();
     const payload = {
       company_id: companyId,
       week_start: toIso(this.monday),
-      department_id: this.deptId,
+      department_id: sel.length === 1 ? sel[0] : (this.deptId ?? null),
+      department_ids: sel.length > 1 ? sel : undefined,
     };
 
     this.api.clearAssignments(payload).subscribe({
@@ -957,10 +1055,12 @@ export class WeeklyScheduleComponent implements OnDestroy {
     this.clearShiftsError = '';
 
     const companyId = this.auth.me()?.profile?.company?.id ?? 1;
+    const sel = this.selectedDeptIds();
     const payload = {
       company_id: companyId,
       week_start: toIso(this.monday),
-      department_id: this.deptId,
+      department_id: sel.length === 1 ? sel[0] : (this.deptId ?? null),
+      department_ids: sel.length > 1 ? sel : undefined,
     };
 
     this.api.clearShifts(payload).subscribe({

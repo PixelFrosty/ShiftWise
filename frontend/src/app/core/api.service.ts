@@ -829,10 +829,10 @@ export class ApiService {
   assignShifts(payload: AssignShiftsPayload): Observable<AssignShiftsResult> {
     return this.http.post<AssignShiftsResult>(`${API_URL}/schedules/assign/`, payload);
   }
-  clearAssignments(payload: { company_id: number; week_start: string; department_id?: number | null }): Observable<{ cleared_count: number }> {
+  clearAssignments(payload: { company_id: number; week_start: string; department_id?: number | null; department_ids?: number[] }): Observable<{ cleared_count: number }> {
     return this.http.post<{ cleared_count: number }>(`${API_URL}/schedules/clear-assignments/`, payload);
   }
-  clearShifts(payload: { company_id: number; week_start: string; department_id?: number | null }): Observable<{ deleted_count: number }> {
+  clearShifts(payload: { company_id: number; week_start: string; department_id?: number | null; department_ids?: number[] }): Observable<{ deleted_count: number }> {
     return this.http.post<{ deleted_count: number }>(`${API_URL}/schedules/clear-shifts/`, payload);
   }
   /** People in one of my departments (default: my home department) who can answer shift requests. */

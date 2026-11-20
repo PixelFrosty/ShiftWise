@@ -145,8 +145,13 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         if 'employee' in params:
             qs = qs.filter(employee_id=self._int(params, 'employee'))
         if 'department' in params:
-            dept_id = self._int(params, 'department')
-            qs = qs.filter(Q(employee__department_id=dept_id) | Q(task__department_id=dept_id) | Q(department_id=dept_id))
+            dept_val = params['department']
+            if ',' in str(dept_val):
+                dept_ids = [int(x.strip()) for x in str(dept_val).split(',') if x.strip().isdigit()]
+                qs = qs.filter(Q(employee__department_id__in=dept_ids) | Q(task__department_id__in=dept_ids) | Q(department_id__in=dept_ids))
+            else:
+                dept_id = self._int(params, 'department')
+                qs = qs.filter(Q(employee__department_id=dept_id) | Q(task__department_id=dept_id) | Q(department_id=dept_id))
         if 'status' in params:
             if params['status'] not in Schedule.Status.values:
                 raise serializers.ValidationError({'status': f'Must be one of: {", ".join(Schedule.Status.values)}.'})
@@ -458,6 +463,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         """
         company_id = request.data.get('company_id')
         dept_id = request.data.get('department_id') or request.data.get('department')
+        dept_ids = request.data.get('department_ids')
         week_start_str = request.data.get('week_start') or request.data.get('date_from')
 
         if not company_id and dept_id:
@@ -488,7 +494,9 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             shift_date__lte=sunday,
             status=Schedule.Status.SCHEDULED,
         )
-        if dept_id:
+        if dept_ids and isinstance(dept_ids, list):
+            qs = qs.filter(Q(task__department_id__in=dept_ids) | Q(department_id__in=dept_ids) | Q(employee__department_id__in=dept_ids))
+        elif dept_id:
             qs = qs.filter(Q(task__department_id=dept_id) | Q(department_id=dept_id) | Q(employee__department_id=dept_id))
         elif company_id:
             qs = qs.filter(Q(task__company_id=company_id) | Q(company_id=company_id) | Q(department__company_id=company_id) | Q(employee__company_id=company_id))
@@ -512,6 +520,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         """
         company_id = request.data.get('company_id')
         dept_id = request.data.get('department_id') or request.data.get('department')
+        dept_ids = request.data.get('department_ids')
         week_start_str = request.data.get('week_start') or request.data.get('date_from')
 
         if not company_id and dept_id:
@@ -541,7 +550,9 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             shift_date__gte=monday,
             shift_date__lte=sunday,
         )
-        if dept_id:
+        if dept_ids and isinstance(dept_ids, list):
+            qs = qs.filter(Q(task__department_id__in=dept_ids) | Q(department_id__in=dept_ids) | Q(employee__department_id__in=dept_ids))
+        elif dept_id:
             qs = qs.filter(Q(task__department_id=dept_id) | Q(department_id=dept_id) | Q(employee__department_id=dept_id))
         elif company_id:
             qs = qs.filter(Q(task__company_id=company_id) | Q(company_id=company_id) | Q(department__company_id=company_id) | Q(employee__company_id=company_id))
