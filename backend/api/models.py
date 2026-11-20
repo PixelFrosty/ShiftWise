@@ -305,3 +305,26 @@ class CompanyHours(models.Model):
 
 
 company_hours = CompanyHours
+
+
+class SchedulePublication(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='schedule_publications')
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, null=True, blank=True, related_name='schedule_publications')
+    week_start = models.DateField(help_text="Monday of the scheduled week")
+    published = models.BooleanField(default=False)
+    published_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='published_schedules')
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'schedule publication'
+        verbose_name_plural = 'schedule publications'
+        unique_together = ('company', 'department', 'week_start')
+        ordering = ['-week_start']
+
+    def __str__(self):
+        dept_str = self.department.name if self.department else 'All Departments'
+        status_str = 'Published' if self.published else 'Draft'
+        return f"{self.company.name} - {dept_str} - Week of {self.week_start} ({status_str})"
+

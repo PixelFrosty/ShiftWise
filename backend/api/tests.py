@@ -9,7 +9,7 @@ from django.urls import reverse
 # pyright: reportAttributeAccessIssue=false
 
 from .admin import EmployeeProfileForm
-from .models import Company, Department, EmployeeProfile, User
+from .models import Company, Department, EmployeeProfile, User, SchedulePublication
 from .serializers import EmployeeProfileSerializer, TaskSerializer
 
 class UserModelTests(TestCase):
@@ -1959,6 +1959,117 @@ class SmartShiftAssignerApiTests(ScheduleApiBase):
 
         s.refresh_from_db()
         self.assertIsNone(s.employee)
+
+
+class SchedulePublicationApiTests(ScheduleApiBase):
+    def setUp(self):
+        super().setUp()
+        self.week_start = datetime.date(2026, 11, 23)  # Monday
+        self.emp2 = make_employee('pubemp2@example.com', department=self.employee.department)
+
+    def test_shift_publication_default_draft(self):
+        url = reverse('shift_publication_api')
+        res = self.client.get(url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.data['published'])
+        self.assertIsNone(res.data['published_at'])
+        self.assertIsNone(res.data['published_by'])
+        self.assertEqual(res.data['week_start'], self.week_start.isoformat())
+
+    def test_shift_review_metrics_and_warnings(self):
+        # 1 assigned shift (4 hours)
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Morning Reception',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=self.employee,
+            status=Schedule.Status.SCHEDULED,
+        )
+        # 1 unassigned shift (open slot)
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Afternoon Reception',
+            shift_date=self.week_start,
+            start_time=datetime.time(13, 0),
+            end_time=datetime.time(17, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('shift_review_api')
+        res = self.client.get(url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots'], 2)
+        self.assertEqual(res.data['filled'], 1)
+        self.assertEqual(res.data['open_slots'], 1)
+        self.assertEqual(res.data['shift_count'], 2)
+        self.assertTrue(len(res.data['open_shifts']) > 0)
+        self.assertIn('Afternoon Reception', res.data['open_shifts'][0])
+        self.assertTrue(len(res.data['people']) > 0)
+        self.assertEqual(res.data['people'][0]['hours'], 4.0)
+        self.assertTrue(any('still need an employee assigned' in w for w in res.data['warnings']))
+
+    def test_shift_publish_and_unpublish_workflow(self):
+        pub_url = reverse('shift_publish_api')
+        unpub_url = reverse('shift_unpublish_api')
+        check_url = reverse('shift_publication_api')
+
+        # 1. Publish week
+        pub_res = self.client.post(pub_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        }, format='json')
+        self.assertEqual(pub_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(pub_res.data['published'])
+        self.assertIsNotNone(pub_res.data['published_at'])
+
+        # Verify DB record
+        db_pub = SchedulePublication.objects.get(
+            company=self.employee.company,
+            department=self.employee.department,
+            week_start=self.week_start,
+        )
+        self.assertTrue(db_pub.published)
+
+        # Check status endpoint
+        check_res = self.client.get(check_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(check_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(check_res.data['published'])
+        self.assertIsNotNone(check_res.data['published_by'])
+
+        # 2. Revert / Unpublish week
+        unpub_res = self.client.post(unpub_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        }, format='json')
+        self.assertEqual(unpub_res.status_code, status.HTTP_200_OK)
+        self.assertFalse(unpub_res.data['published'])
+        self.assertIsNone(unpub_res.data['published_at'])
+
+        db_pub.refresh_from_db()
+        self.assertFalse(db_pub.published)
+
+        # Check status endpoint again
+        check_res2 = self.client.get(check_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(check_res2.status_code, status.HTTP_200_OK)
+        self.assertFalse(check_res2.data['published'])
+
 
 
 

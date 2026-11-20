@@ -1,7 +1,8 @@
 # Create your views here.
 
 
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
+from django.utils import timezone
 import sys
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
@@ -24,6 +25,7 @@ from .models import (
     Task,
     TimeOffRequest,
     User,
+    SchedulePublication,
 )
 from .serializers import (
     AvailabilitySlotSerializer,
@@ -825,44 +827,305 @@ def me(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def shift_publication(request):
-    week_start = request.query_params.get('week_start', '')
+    week_start_raw = request.query_params.get('week_start', '')
+    dept_id = request.query_params.get('department') or request.query_params.get('department_id')
+    company_id = request.query_params.get('company_id')
+
+    dept = Department.objects.filter(pk=dept_id).first() if (dept_id and str(dept_id) != '0') else None
+    company = None
+    if dept:
+        company = dept.company
+    elif company_id:
+        company = Company.objects.filter(pk=company_id).first()
+    elif request.user and request.user.is_authenticated:
+        prof = getattr(request.user, 'employee_profiles', None)
+        if prof and prof.exists():
+            company = prof.first().company
+    if not company:
+        company = Company.objects.first()
+
+    parsed_date = parse_date(str(week_start_raw)) if week_start_raw else None
+    if not parsed_date:
+        today = timezone.localdate() if hasattr(timezone, 'localdate') else date.today()
+        parsed_date = today - timedelta(days=today.weekday())
+    else:
+        parsed_date = parsed_date - timedelta(days=parsed_date.weekday())
+
+    pub = None
+    if company:
+        if dept:
+            pub = SchedulePublication.objects.filter(company=company, department=dept, week_start=parsed_date).first()
+        if not pub:
+            pub = SchedulePublication.objects.filter(company=company, department__isnull=True, week_start=parsed_date).first()
+
+    is_published = pub.published if pub else False
+    pub_by = None
+    if pub and pub.published_by:
+        pub_by = pub.published_by.get_full_name() or pub.published_by.first_name or pub.published_by.username or pub.published_by.email
+    pub_at = pub.published_at.isoformat() if pub and pub.published_at else None
+
+    dept_payload = {'id': dept.id, 'name': dept.name} if dept else {'id': 0, 'name': 'All Departments'}
     return Response({
-        'published': True,
-        'week_start': week_start,
-        'published_by': None,
-        'published_at': None
+        'department': dept_payload,
+        'week_start': parsed_date.isoformat(),
+        'published': is_published,
+        'published_by': pub_by,
+        'published_at': pub_at,
     })
 
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def shift_review(request):
-    dept_id = request.query_params.get('department')
-    week_start = request.query_params.get('week_start', '')
-    dept = Department.objects.filter(pk=dept_id).first() if dept_id else Department.objects.first()
+    week_start_raw = request.query_params.get('week_start', '')
+    dept_id = request.query_params.get('department') or request.query_params.get('department_id')
+    company_id = request.query_params.get('company_id')
+
+    dept = Department.objects.filter(pk=dept_id).first() if (dept_id and str(dept_id) != '0') else None
+    company = None
+    if dept:
+        company = dept.company
+    elif company_id:
+        company = Company.objects.filter(pk=company_id).first()
+    elif request.user and request.user.is_authenticated:
+        prof = getattr(request.user, 'employee_profiles', None)
+        if prof and prof.exists():
+            company = prof.first().company
+    if not company:
+        company = Company.objects.first()
+
+    parsed_date = parse_date(str(week_start_raw)) if week_start_raw else None
+    if not parsed_date:
+        today = timezone.localdate() if hasattr(timezone, 'localdate') else date.today()
+        parsed_date = today - timedelta(days=today.weekday())
+    else:
+        parsed_date = parsed_date - timedelta(days=parsed_date.weekday())
+    week_end = parsed_date + timedelta(days=6)
+
+    sched_qs = Schedule.objects.filter(shift_date__gte=parsed_date, shift_date__lte=week_end)
+    if dept:
+        sched_qs = sched_qs.filter(
+            Q(department=dept) | Q(task__department=dept) | Q(employee__department=dept)
+        )
+    elif company:
+        sched_qs = sched_qs.filter(
+            Q(company=company) | Q(department__company=company) | Q(task__company=company) | Q(employee__company=company)
+        )
+
+    sched_list = list(sched_qs.select_related('employee__user', 'task'))
+    slots = len(sched_list)
+    filled_slots = [s for s in sched_list if s.employee_id is not None]
+    open_slots = [s for s in sched_list if s.employee_id is None]
+    filled = len(filled_slots)
+    open_count = len(open_slots)
+
+    distinct_shifts = {(s.shift_date, s.start_time, s.end_time, s.task_name or (s.task.name if s.task else '')) for s in sched_list}
+    shift_count = len(distinct_shifts)
+
+    open_shifts = []
+    seen_open = set()
+    for s in open_slots:
+        tname = s.task_name or (s.task.name if s.task else 'Shift')
+        k = (s.shift_date, s.start_time, s.end_time, tname)
+        if k not in seen_open:
+            seen_open.add(k)
+            day_str = s.shift_date.strftime('%a %b %d')
+            time_str = f"{s.start_time.strftime('%H:%M')} - {s.end_time.strftime('%H:%M')}"
+            open_shifts.append(f"{tname} – {day_str} ({time_str})")
+
+    emp_map = {}
+    for s in filled_slots:
+        emp = s.employee
+        if not emp:
+            continue
+        emp_id = emp.id
+        if emp_id not in emp_map:
+            user = emp.user
+            name = (user.get_full_name() or user.username if user else '') or f"Employee #{emp.id}"
+            emp_map[emp_id] = {'name': name, 'hours': 0.0, 'shifts': 0, 'emp': emp, 'shift_dates': []}
+
+        start_dt = datetime.combine(s.shift_date, s.start_time)
+        end_dt = datetime.combine(s.shift_date, s.end_time)
+        if end_dt <= start_dt:
+            end_dt += timedelta(days=1)
+        dur = round((end_dt - start_dt).total_seconds() / 3600.0, 1)
+
+        emp_map[emp_id]['hours'] += dur
+        emp_map[emp_id]['shifts'] += 1
+        emp_map[emp_id]['shift_dates'].append(s.shift_date)
+
+    people = [
+        {'name': item['name'], 'hours': round(item['hours'], 1), 'shifts': item['shifts']}
+        for item in sorted(emp_map.values(), key=lambda x: x['name'])
+    ]
+
+    warnings = []
+    if open_count > 0:
+        warnings.append(f"{open_count} slot{'s' if open_count != 1 else ''} still need an employee assigned.")
+    for item in emp_map.values():
+        if item['hours'] > 40.0:
+            warnings.append(f"{item['name']} is scheduled for {item['hours']:.1f} hours (> 40h standard).")
+
+    if emp_map:
+        scheduled_emp_ids = list(emp_map.keys())
+        time_offs = TimeOffRequest.objects.filter(
+            employee_id__in=scheduled_emp_ids,
+            status=TimeOffRequest.Status.APPROVED,
+            start_date__lte=week_end,
+            end_date__gte=parsed_date,
+        ).select_related('employee__user')
+        for to in time_offs:
+            item = emp_map.get(to.employee_id)
+            if item:
+                conflict_dates = [d for d in item['shift_dates'] if to.start_date <= d <= to.end_date]
+                if conflict_dates:
+                    dates_str = ', '.join(d.strftime('%a %b %d') for d in sorted(set(conflict_dates)))
+                    warnings.append(f"{item['name']} has approved time off on {dates_str}.")
+
+    pub = None
+    if company:
+        if dept:
+            pub = SchedulePublication.objects.filter(company=company, department=dept, week_start=parsed_date).first()
+        if not pub:
+            pub = SchedulePublication.objects.filter(company=company, department__isnull=True, week_start=parsed_date).first()
+
+    pub_by = None
+    if pub and pub.published_by:
+        pub_by = pub.published_by.get_full_name() or pub.published_by.first_name or pub.published_by.username or pub.published_by.email
+    pub_at = pub.published_at.isoformat() if pub and pub.published_at else None
+
+    dept_payload = {'id': dept.id, 'name': dept.name} if dept else {'id': 0, 'name': 'All Departments'}
+    week_label = f"Week of {parsed_date.strftime('%b %d, %Y')}"
+
     return Response({
-        'department': {'id': dept.id, 'name': dept.name} if dept else {'id': 1, 'name': 'Operations'},
-        'week_label': f'Week of {week_start}' if week_start else 'Current Week',
-        'shift_count': Schedule.objects.filter(shift_date__gte=week_start).values('task', 'shift_date', 'start_time').distinct().count() if week_start else Schedule.objects.count(),
-        'slots': Schedule.objects.count(),
-        'filled': Schedule.objects.filter(employee__isnull=False).count(),
-        'open_slots': Schedule.objects.filter(employee__isnull=True).count(),
-        'warnings': [],
-        'open_shifts': [],
-        'people': [],
+        'department': dept_payload,
+        'week_start': parsed_date.isoformat(),
+        'week_label': week_label,
+        'shift_count': shift_count,
+        'slots': slots,
+        'filled': filled,
+        'open_slots': open_count,
+        'warnings': warnings,
+        'open_shifts': open_shifts,
+        'people': people,
+        'published': pub.published if pub else False,
+        'published_by': pub_by,
+        'published_at': pub_at,
     })
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def shift_publish(request):
-    week_start = request.data.get('week_start', '')
-    user_name = request.user.get_full_name() or request.user.email if request.user and request.user.is_authenticated else 'Manager'
+    data = request.data or {}
+    week_start_raw = data.get('week_start', '')
+    dept_id = data.get('department') or data.get('department_id')
+    company_id = data.get('company_id')
+
+    dept = Department.objects.filter(pk=dept_id).first() if (dept_id and str(dept_id) != '0') else None
+    company = None
+    if dept:
+        company = dept.company
+    elif company_id:
+        company = Company.objects.filter(pk=company_id).first()
+    elif request.user and request.user.is_authenticated:
+        prof = getattr(request.user, 'employee_profiles', None)
+        if prof and prof.exists():
+            company = prof.first().company
+    if not company:
+        company = Company.objects.first()
+
+    if not company:
+        return Response({'error': 'No company found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    parsed_date = parse_date(str(week_start_raw)) if week_start_raw else None
+    if not parsed_date:
+        today = timezone.localdate() if hasattr(timezone, 'localdate') else date.today()
+        parsed_date = today - timedelta(days=today.weekday())
+    else:
+        parsed_date = parsed_date - timedelta(days=parsed_date.weekday())
+
+    pub_user = request.user if request.user and request.user.is_authenticated else None
+    now = timezone.now()
+
+    pub, _ = SchedulePublication.objects.update_or_create(
+        company=company,
+        department=dept,
+        week_start=parsed_date,
+        defaults={
+            'published': True,
+            'published_by': pub_user,
+            'published_at': now,
+        }
+    )
+
+    pub_by = None
+    if pub.published_by:
+        pub_by = pub.published_by.get_full_name() or pub.published_by.first_name or pub.published_by.username or pub.published_by.email
+    elif pub_user:
+        pub_by = pub_user.get_full_name() or pub_user.first_name or pub_user.username or pub_user.email
+    else:
+        pub_by = 'Manager'
+
+    dept_payload = {'id': dept.id, 'name': dept.name} if dept else {'id': 0, 'name': 'All Departments'}
     return Response({
+        'department': dept_payload,
+        'week_start': parsed_date.isoformat(),
         'published': True,
-        'week_start': week_start,
-        'published_by': user_name,
-        'published_at': date.today().isoformat()
+        'published_by': pub_by,
+        'published_at': pub.published_at.isoformat() if pub.published_at else now.isoformat(),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def shift_unpublish(request):
+    data = request.data or {}
+    week_start_raw = data.get('week_start', '')
+    dept_id = data.get('department') or data.get('department_id')
+    company_id = data.get('company_id')
+
+    dept = Department.objects.filter(pk=dept_id).first() if (dept_id and str(dept_id) != '0') else None
+    company = None
+    if dept:
+        company = dept.company
+    elif company_id:
+        company = Company.objects.filter(pk=company_id).first()
+    elif request.user and request.user.is_authenticated:
+        prof = getattr(request.user, 'employee_profiles', None)
+        if prof and prof.exists():
+            company = prof.first().company
+    if not company:
+        company = Company.objects.first()
+
+    if not company:
+        return Response({'error': 'No company found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    parsed_date = parse_date(str(week_start_raw)) if week_start_raw else None
+    if not parsed_date:
+        today = timezone.localdate() if hasattr(timezone, 'localdate') else date.today()
+        parsed_date = today - timedelta(days=today.weekday())
+    else:
+        parsed_date = parsed_date - timedelta(days=parsed_date.weekday())
+
+    pub, _ = SchedulePublication.objects.update_or_create(
+        company=company,
+        department=dept,
+        week_start=parsed_date,
+        defaults={
+            'published': False,
+            'published_by': request.user if request.user and request.user.is_authenticated else None,
+            'published_at': None,
+        }
+    )
+
+    dept_payload = {'id': dept.id, 'name': dept.name} if dept else {'id': 0, 'name': 'All Departments'}
+    return Response({
+        'department': dept_payload,
+        'week_start': parsed_date.isoformat(),
+        'published': False,
+        'published_by': None,
+        'published_at': None,
     })
 
 

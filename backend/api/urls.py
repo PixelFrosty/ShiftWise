@@ -25,5 +25,6 @@ urlpatterns = [
     path('shifts/publication/', views.shift_publication, name='shift_publication_api'),
     path('shifts/review/', views.shift_review, name='shift_review_api'),
     path('shifts/publish/', views.shift_publish, name='shift_publish_api'),
+    path('shifts/unpublish/', views.shift_unpublish, name='shift_unpublish_api'),
     path('shifts/auto-schedule/', views.shift_auto_schedule, name='shift_auto_schedule_api'),
 ] + router.urls

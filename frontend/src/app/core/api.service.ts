@@ -771,15 +771,28 @@ export class ApiService {
       })
     );
   }
-  publication(department: number, weekStart: string): Observable<Publication> {
-    return this.http.get<Publication>(`${API_URL}/shifts/publication/`, { params: new HttpParams().set('department', department).set('week_start', weekStart) });
+  publication(department?: number | null, weekStart?: string): Observable<Publication> {
+    let params = new HttpParams();
+    if (weekStart) { params = params.set('week_start', weekStart); }
+    if (department) { params = params.set('department', department); }
+    return this.http.get<Publication>(`${API_URL}/shifts/publication/`, { params });
   }
-  postReview(department: number, weekStart: string): Observable<PostReview> {
-    return this.http.get<PostReview>(`${API_URL}/shifts/review/`, { params: new HttpParams().set('department', department).set('week_start', weekStart) });
+  postReview(department?: number | null, weekStart?: string): Observable<PostReview> {
+    let params = new HttpParams();
+    if (weekStart) { params = params.set('week_start', weekStart); }
+    if (department) { params = params.set('department', department); }
+    return this.http.get<PostReview>(`${API_URL}/shifts/review/`, { params });
   }
   /** Both flags are the two steps (review, then "are you sure"); the server refuses to post without them. */
-  publishWeek(department: number, weekStart: string): Observable<Publication> {
-    return this.http.post<Publication>(`${API_URL}/shifts/publish/`, { department, week_start: weekStart, reviewed: true, confirmed: true });
+  publishWeek(department?: number | null, weekStart?: string): Observable<Publication> {
+    const body: any = { week_start: weekStart, reviewed: true, confirmed: true };
+    if (department) { body.department = department; }
+    return this.http.post<Publication>(`${API_URL}/shifts/publish/`, body);
+  }
+  unpublishWeek(department?: number | null, weekStart?: string): Observable<Publication> {
+    const body: any = { week_start: weekStart };
+    if (department) { body.department = department; }
+    return this.http.post<Publication>(`${API_URL}/shifts/unpublish/`, body);
   }
   autoSchedule(department: number, dateFrom: string, dateTo: string, confirmPending = false): Observable<AutoScheduleResult> {
     return this.http.post<AutoScheduleResult>(`${API_URL}/shifts/auto-schedule/`, {

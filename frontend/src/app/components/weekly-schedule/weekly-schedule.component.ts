@@ -720,9 +720,10 @@ export class WeeklyScheduleComponent implements OnDestroy {
   }
 
   openPost(): void {
-    if (this.deptId === null || this.postBusy) { return; }
+    if (this.postBusy) { return; }
+    const pubDept = this.deptId ?? (this.selectedDeptIds().length === 1 ? this.selectedDeptIds()[0] : null);
     this.postError = '';
-    this.api.postReview(this.deptId, toIso(this.monday)).subscribe({
+    this.api.postReview(pubDept, toIso(this.monday)).subscribe({
       next: r => { this.postReview = r; this.postConfirm = false; },
       error: err => { this.autoError = errorText(err); }
     });
@@ -731,19 +732,32 @@ export class WeeklyScheduleComponent implements OnDestroy {
   cancelPost(): void { this.postReview = null; this.postConfirm = false; this.postError = ''; }
 
   confirmPost(): void {
-    if (this.deptId === null || this.postBusy || !this.postReview) { return; }
+    if (this.postBusy || !this.postReview) { return; }
+    const pubDept = this.deptId ?? (this.selectedDeptIds().length === 1 ? this.selectedDeptIds()[0] : null);
     this.postBusy = true;
-    this.api.publishWeek(this.deptId, toIso(this.monday)).subscribe({
+    this.api.publishWeek(pubDept, toIso(this.monday)).subscribe({
       next: p => { this.pub.set(p); this.postBusy = false; this.cancelPost(); },
       error: err => { this.postBusy = false; this.postConfirm = false; this.postError = errorText(err); }
     });
   }
 
+  unpublishWeek(): void {
+    if (this.postBusy) { return; }
+    const pubDept = this.deptId ?? (this.selectedDeptIds().length === 1 ? this.selectedDeptIds()[0] : null);
+    this.postBusy = true;
+    this.api.unpublishWeek(pubDept, toIso(this.monday)).subscribe({
+      next: p => { this.pub.set(p); this.postBusy = false; },
+      error: err => { this.postBusy = false; this.postError = errorText(err); }
+    });
+  }
+
   reload(done?: () => void): void {
     this.pub.set(null);
-    if (this.deptId !== null) {
-      this.api.publication(this.deptId, toIso(this.monday)).subscribe({ next: p => this.pub.set(p), error: () => this.pub.set(null) });
-    }
+    const pubDept = this.deptId ?? (this.selectedDeptIds().length === 1 ? this.selectedDeptIds()[0] : null);
+    this.api.publication(pubDept, toIso(this.monday)).subscribe({
+      next: p => this.pub.set(p),
+      error: () => this.pub.set(null)
+    });
     const dept = this.selectedDeptIds().length === 1 ? this.selectedDeptIds()[0] : (this.deptId ?? null);
     this.api.timeOff(undefined, toIso(this.monday), toIso(addDays(this.monday, 6)), dept ?? undefined).subscribe({
       next: list => this.weekTimeOff.set(list),

@@ -12,7 +12,8 @@ from .models import (
     TimeOffRequest,
     User,
     Skill,
-    Task
+    Task,
+    SchedulePublication
 )
 
 
@@ -171,3 +172,11 @@ admin.site.register(CompatibilityScore)
 admin.site.register(AvailabilitySlot)
 admin.site.register(TimeOffRequest)
 admin.site.register(Project)
+
+
+@admin.register(SchedulePublication)
+class SchedulePublicationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'company', 'department', 'week_start', 'published', 'published_by', 'published_at')
+    list_filter = ('published', 'company', 'department')
+    ordering = ('-week_start',)
+
