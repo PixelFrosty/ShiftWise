@@ -22,6 +22,8 @@ export class RegisterComponent {
   email = '';
   password = '';
   confirmPassword = '';
+  showPassword = false;
+  showConfirmPassword = false;
 
   // UI state
   isMenuOpen: boolean = false;

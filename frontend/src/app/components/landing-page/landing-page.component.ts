@@ -17,6 +17,7 @@ export class LandingPageComponent {
 
   email = '';
   password = '';
+  showPassword = false;
   isSubmitting = false;
 
   hasError: boolean = false;
