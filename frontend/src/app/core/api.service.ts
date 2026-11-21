@@ -729,6 +729,7 @@ export class ApiService {
       start_time: shift?.start_time,
       end_time: shift?.end_time,
       employees: employeeIds,
+      headcount: shift?.headcount,
       notes: note
     };
 

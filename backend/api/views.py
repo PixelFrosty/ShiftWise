@@ -296,8 +296,6 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         else:
             task_name = (request.data.get('task_name') or (task.name if task else '')).strip()
 
-        headcount = task.required_people if task else int(request.data.get('headcount') or 1)
-
         existing_qs = Schedule.objects.filter(
             shift_date=shift_date, start_time=start_time, end_time=end_time
         ).exclude(status=Schedule.Status.CANCELLED)
@@ -305,6 +303,12 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             existing_qs = existing_qs.filter(task=task)
         else:
             existing_qs = existing_qs.filter(task_name=task_name)
+
+        if task:
+            headcount = task.required_people
+        else:
+            # No task: use the headcount sent, or the number of slots that already exist for this shift.
+            headcount = max(int(request.data.get('headcount') or 0), existing_qs.count(), 1)
 
         already_assigned = existing_qs.filter(employee__isnull=False).count()
         if already_assigned + len(employees) > headcount:
