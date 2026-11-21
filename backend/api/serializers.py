@@ -1,5 +1,17 @@
 from rest_framework import serializers
-from .models import (AvailabilitySlot, CompatibilityScore, EmployeeProfile, Project, Schedule, TimeOffRequest, User)
+from .models import (
+    AvailabilitySlot,
+    Company,
+    CompatibilityScore,
+    Department,
+    EmployeeProfile,
+    Project,
+    Schedule,
+    Skill,
+    Task,
+    TimeOffRequest,
+    User,
+)
 
 class UserSerializer(serializers.ModelSerializer):
 
@@ -14,17 +26,49 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
+class SkillSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    company = serializers.PrimaryKeyRelatedField(queryset=Company.objects.all(), required=False)
+
+    class Meta:
+        model = Skill
+        fields = ['id', 'company', 'company_name', 'name', 'description']
+
+
 class EmployeeProfileSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    skills = serializers.PrimaryKeyRelatedField(queryset=Skill.objects.all(), many=True, required=False)
+    skills_names = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
-        fields = ['id', 'user', 'employee_name', 'company', 'department', 'role', 'position',
-                  'productivity_score', 'pay_rate', 'created_at', 'modified_at']
+        fields = ['id', 'user', 'employee_name', 'name', 'first_name', 'last_name', 'email',
+                  'company', 'department', 'department_name', 'role', 'position',
+                  'productivity_score', 'pay_rate', 'skills', 'skills_names', 'created_at', 'modified_at']
         read_only_fields = ['created_at', 'modified_at']
 
     def get_employee_name(self, obj):
         return obj.user.get_full_name() or obj.user.email
+
+    def get_name(self, obj):
+        return obj.user.get_full_name() or obj.user.email
+
+    def get_skills_names(self, obj):
+        return [s.name for s in obj.skills.all()]
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        if instance.department:
+            ret['department'] = {'id': instance.department.id, 'name': instance.department.name}
+        ret['extra_departments'] = []
+        ret['is_roster'] = False
+        ret['is_minor'] = False
+        return ret
 
     def validate(self, attrs):
         if self.instance and self.instance.pk and 'company' in attrs:
@@ -36,20 +80,109 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         department = attrs.get('department', getattr(self.instance, 'department', None))
         if company and department and department.company_id != company.pk:
             raise serializers.ValidationError({'department': 'Department does not belong to this company.'})
+        skills = attrs.get('skills')
+        if company and skills:
+            invalid_skills = [s for s in skills if s.company_id != company.pk]
+            if invalid_skills:
+                raise serializers.ValidationError(
+                    {'skills': 'All assigned skills must belong to the employee company.'}
+                )
+        return attrs
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    employee_count = serializers.SerializerMethodField()
+    managers = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Department
+        fields = ['id', 'company', 'name', 'employee_count', 'managers', 'created_at', 'modified_at']
+        read_only_fields = ['created_at', 'modified_at']
+
+    def get_employee_count(self, obj):
+        return obj.employees.count()
+
+    def get_managers(self, obj):
+        return [
+            e.user.get_full_name() or e.user.email
+            for e in obj.employees.filter(role__in=[EmployeeProfile.Role.CEO, EmployeeProfile.Role.MANAGER]).select_related('user')
+        ]
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    skills_names = serializers.SerializerMethodField()
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    preferred_day_name = serializers.CharField(source='get_preferred_day_display', read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'id', 'company', 'name', 'description', 'priority', 'preferred_window',
+            'preferred_day', 'preferred_day_name',
+            'is_recurring', 'required_people', 'duration_hours', 'skills', 'skills_names',
+            'project', 'project_name', 'department', 'department_name', 'employee'
+        ]
+
+    def get_skills_names(self, obj):
+        return [s.name for s in obj.skills.all()]
+
+    def validate(self, attrs):
+        company = attrs.get('company', getattr(self.instance, 'company', None))
+        skills = attrs.get('skills')
+        if company and skills:
+            invalid_skills = [s for s in skills if s.company_id != company.pk]
+            if invalid_skills:
+                raise serializers.ValidationError(
+                    {'skills': 'All assigned skills must belong to the task company.'}
+                )
         return attrs
 
 
 class ScheduleSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
+    task_required_people = serializers.SerializerMethodField()
+    company = serializers.PrimaryKeyRelatedField(queryset=Company.objects.all(), required=False, allow_null=True)
+    department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = Schedule
-        fields = ['id', 'task_name', 'employee', 'employee_name', 'shift_date', 'start_time',
-                  'end_time', 'status', 'notes', 'created_at', 'modified_at']
+        fields = ['id', 'company', 'department', 'task', 'task_name', 'employee', 'employee_name', 'shift_date', 'start_time',
+                  'end_time', 'status', 'notes', 'task_required_people', 'created_at', 'modified_at']
         read_only_fields = ['created_at', 'modified_at']
+        extra_kwargs = {
+            'employee': {'required': True, 'allow_null': True},
+        }
 
     def get_employee_name(self, obj):
+        if not obj.employee:
+            return None
         return obj.employee.user.get_full_name() or obj.employee.user.email
+
+    def get_task_required_people(self, obj):
+        if obj.task:
+            return obj.task.required_people
+        return None
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        if not ret.get('task_name') and instance.task:
+            ret['task_name'] = instance.task.name
+        if ret.get('department') is None:
+            if instance.department_id:
+                ret['department'] = instance.department_id
+            elif instance.employee and instance.employee.department_id:
+                ret['department'] = instance.employee.department_id
+            elif instance.task and instance.task.department_id:
+                ret['department'] = instance.task.department_id
+        if ret.get('company') is None:
+            if instance.company_id:
+                ret['company'] = instance.company_id
+            elif instance.task and instance.task.company_id:
+                ret['company'] = instance.task.company_id
+            elif instance.employee and instance.employee.company_id:
+                ret['company'] = instance.employee.company_id
+        return ret
 
     def validate_task_name(self, value):
         if not value.strip():
@@ -78,6 +211,19 @@ class ScheduleSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f'Overlaps existing schedule #{clash.pk} for this employee '
                     f'({clash.start_time:%H:%M}-{clash.end_time:%H:%M} on {clash.shift_date}).')
+
+        task = current('task')
+        if task and employee and status != Schedule.Status.CANCELLED and day and start and end:
+            existing = Schedule.objects.filter(
+                task=task, shift_date=day, start_time=start, end_time=end, employee__isnull=False
+            ).exclude(status=Schedule.Status.CANCELLED)
+            if self.instance:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.count() >= task.required_people:
+                raise serializers.ValidationError(
+                    f'Cannot add more than {task.required_people} employee(s) to this schedule (headcount required by task).'
+                )
+
         return attrs
 
 
@@ -216,4 +362,71 @@ class ProjectSerializer(serializers.ModelSerializer):
         department = attrs.get('department', getattr(self.instance, 'department', None))
         if company and department and department.company_id != company.pk:
             raise serializers.ValidationError({'department': 'Department does not belong to this company.'})
+        return attrs
+
+
+class GenerateShiftsSerializer(serializers.Serializer):
+    company_id = serializers.IntegerField(required=True)
+    week_start = serializers.DateField(required=True)
+    department_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    clear_existing = serializers.BooleanField(required=False, default=False)
+
+    def validate_company_id(self, value):
+        if not Company.objects.filter(pk=value).exists():
+            raise serializers.ValidationError(f"Company #{value} does not exist.")
+        return value
+
+    def validate(self, attrs):
+        dept_id = attrs.get('department_id')
+        comp_id = attrs.get('company_id')
+        if dept_id:
+            if not Department.objects.filter(pk=dept_id, company_id=comp_id).exists():
+                raise serializers.ValidationError(
+                    {'department_id': 'Department does not exist or does not belong to this company.'}
+                )
+        return attrs
+
+
+class AssignShiftsSerializer(serializers.Serializer):
+    company_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    week_start = serializers.DateField(required=True)
+    department_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    forced_groups = serializers.ListField(
+        child=serializers.ListField(child=serializers.IntegerField()),
+        required=False,
+        default=list,
+    )
+
+    def validate_company_id(self, value):
+        if value is not None and not Company.objects.filter(pk=value).exists():
+            raise serializers.ValidationError(f"Company #{value} does not exist.")
+        return value
+
+    def validate(self, attrs):
+        dept_id = attrs.get('department_id')
+        comp_id = attrs.get('company_id')
+        if not comp_id and dept_id:
+            dept = Department.objects.filter(pk=dept_id).first()
+            if dept:
+                comp_id = dept.company_id
+                attrs['company_id'] = comp_id
+        if not comp_id and self.context.get('request') and self.context['request'].user.is_authenticated:
+            prof = getattr(self.context['request'].user, 'employee_profiles', None)
+            if prof and prof.exists():
+                comp_id = prof.first().company_id
+                attrs['company_id'] = comp_id
+        if not comp_id:
+            first_c = Company.objects.first()
+            if first_c:
+                comp_id = first_c.id
+                attrs['company_id'] = comp_id
+
+        if not comp_id or not Company.objects.filter(pk=comp_id).exists():
+            raise serializers.ValidationError({'company_id': 'Company does not exist.'})
+
+        if dept_id:
+            if not Department.objects.filter(pk=dept_id, company_id=comp_id).exists():
+                raise serializers.ValidationError(
+                    {'department_id': 'Department does not exist or does not belong to this company.'}
+                )
         return attrs

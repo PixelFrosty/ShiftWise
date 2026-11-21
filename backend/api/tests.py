@@ -9,8 +9,8 @@ from django.urls import reverse
 # pyright: reportAttributeAccessIssue=false
 
 from .admin import EmployeeProfileForm
-from .models import Company, Department, EmployeeProfile, User
-from .serializers import EmployeeProfileSerializer
+from .models import Company, Department, EmployeeProfile, User, SchedulePublication
+from .serializers import EmployeeProfileSerializer, TaskSerializer
 
 class UserModelTests(TestCase):
     def test_create(self):
@@ -524,6 +524,36 @@ class ScheduleCreateTests(ScheduleApiBase):
         response = self.client.post(self.list_url, self.payload(created_at='2000-01-01T00:00:00Z'), format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertNotEqual(response.data['created_at'][:4], '2000')
+
+    def test_schedule_inherits_company_and_department_from_task(self):
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Kitchen Duty'
+        )
+        s = Schedule.objects.create(
+            task=task,
+            task_name=task.name,
+            employee=self.employee,
+            shift_date=DAY,
+            start_time='10:00',
+            end_time='14:00'
+        )
+        self.assertEqual(s.company, self.employee.company)
+        self.assertEqual(s.department, self.employee.department)
+
+    def test_schedule_attached_company_and_department_without_task(self):
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Custom Task',
+            employee=self.employee,
+            shift_date=DAY,
+            start_time='10:00',
+            end_time='14:00'
+        )
+        self.assertEqual(s.company, self.employee.company)
+        self.assertEqual(s.department, self.employee.department)
 
 
 class ScheduleOverlapTests(ScheduleApiBase):
@@ -1094,3 +1124,953 @@ class ProjectTests(EmployeeApiBase):
         self.emp.department.delete()
         project.refresh_from_db()
         self.assertIsNone(project.department)
+
+
+# Shift Generator Tests
+import datetime
+from .models import CompanyHours, Skill, Task
+from .services.shift_generator import ShiftGeneratorService
+
+class ShiftGeneratorTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='schedmanager', email='schedmanager@example.com',
+            first_name='Schedule', last_name='Manager', password='pass', date_of_birth='1990-01-01'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.company = Company.objects.create(name='Test Retail Co')
+        self.department = Department.objects.create(company=self.company, name='Operations')
+        self.employee = EmployeeProfile.objects.create(
+            user=self.user, company=self.company, department=self.department,
+            role=EmployeeProfile.Role.EMPLOYEE, max_weekly_hours=40.0
+        )
+
+        # Operating hours: Monday to Friday 09:00 - 17:00 (8h each), closed weekends
+        self.hours = CompanyHours.objects.create(
+            company=self.company,
+            monday_start=datetime.time(9, 0), monday_end=datetime.time(17, 0),
+            tuesday_start=datetime.time(9, 0), tuesday_end=datetime.time(17, 0),
+            wednesday_start=datetime.time(9, 0), wednesday_end=datetime.time(17, 0),
+            thursday_start=datetime.time(9, 0), thursday_end=datetime.time(17, 0),
+            friday_start=datetime.time(9, 0), friday_end=datetime.time(17, 0),
+            saturday_start=None, saturday_end=None,
+            sunday_start=None, sunday_end=None,
+        )
+
+        self.project = Project.objects.create(
+            company=self.company, department=self.department, name='Store Front',
+            priority=Project.Priority.HIGH, is_active=True
+        )
+        self.week_start = datetime.date(2026, 11, 16)  # A Monday
+
+    def test_recurring_task_generates_for_every_open_day(self):
+        Task.objects.create(
+            company=self.company, project=self.project, name='Register Lead',
+            is_recurring=True, required_people=1, duration_hours=8.0,
+            preferred_window=Task.PreferredWindow.OPEN_TO_CLOSE
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 5)
+        self.assertEqual(res['unassigned_shifts'], 5)
+        self.assertEqual(res['pre_assigned_shifts'], 0)
+        # Verify shifts exist Mon-Fri (Nov 16 - Nov 20)
+        dates = Schedule.objects.filter(task__company=self.company).values_list('shift_date', flat=True)
+        self.assertEqual(len(set(dates)), 5)
+        for s in Schedule.objects.all():
+            self.assertEqual(s.start_time, datetime.time(9, 0))
+            self.assertEqual(s.end_time, datetime.time(17, 0))
+            self.assertIsNone(s.employee)
+
+    def test_multi_person_preassigned_task(self):
+        Task.objects.create(
+            company=self.company, project=self.project, name='Inventory Audit',
+            is_recurring=False, required_people=3, duration_hours=4.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 3)
+        self.assertEqual(res['pre_assigned_shifts'], 1)
+        self.assertEqual(res['unassigned_shifts'], 2)
+
+        shifts = list(Schedule.objects.all().order_by('id'))
+        self.assertEqual(len(shifts), 3)
+        self.assertEqual(shifts[0].employee, self.employee)
+        self.assertIsNone(shifts[1].employee)
+        self.assertIsNone(shifts[2].employee)
+        for s in shifts:
+            self.assertEqual(s.start_time, datetime.time(9, 0))
+            self.assertEqual(s.end_time, datetime.time(13, 0))
+
+    def test_preferred_windows_intra_day(self):
+        # 1. Beginning of day (2h) -> 09:00 - 11:00
+        t1 = Task.objects.create(
+            company=self.company, project=self.project, name='Opening Prep',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # 2. Mid day (4h) -> midpoint is 13:00 -> 11:00 - 15:00
+        t2 = Task.objects.create(
+            company=self.company, project=self.project, name='Lunch Rush',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            preferred_window=Task.PreferredWindow.MID_DAY
+        )
+        # 3. End of day (2h) -> 15:00 - 17:00
+        t3 = Task.objects.create(
+            company=self.company, project=self.project, name='Closing Sweep',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.END_OF_DAY
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        s1 = Schedule.objects.get(task=t1)
+        self.assertEqual(s1.start_time, datetime.time(9, 0))
+        self.assertEqual(s1.end_time, datetime.time(11, 0))
+
+        s2 = Schedule.objects.get(task=t2)
+        self.assertEqual(s2.start_time, datetime.time(11, 0))
+        self.assertEqual(s2.end_time, datetime.time(15, 0))
+
+        s3 = Schedule.objects.get(task=t3)
+        self.assertEqual(s3.start_time, datetime.time(15, 0))
+        self.assertEqual(s3.end_time, datetime.time(17, 0))
+
+    def test_multi_day_split_for_long_duration(self):
+        # 20-hour task, daily capacity is 8 hours -> 8h, 8h, 4h across 3 days
+        Task.objects.create(
+            company=self.company, project=self.project, name='Store Remodel',
+            is_recurring=False, required_people=1, duration_hours=20.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 3)
+        shifts = list(Schedule.objects.all().order_by('shift_date'))
+        self.assertEqual(len(shifts), 3)
+        # Day 1: 8h (09:00 - 17:00)
+        self.assertEqual(shifts[0].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[0].end_time, datetime.time(17, 0))
+        # Day 2: 8h (09:00 - 17:00)
+        self.assertEqual(shifts[1].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[1].end_time, datetime.time(17, 0))
+        # Day 3: 4h (09:00 - 13:00)
+        self.assertEqual(shifts[2].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[2].end_time, datetime.time(13, 0))
+
+    def test_preassigned_employee_leave_avoidance(self):
+        # Alice is on approved time off on Monday Nov 16
+        TimeOffRequest.objects.create(
+            employee=self.employee,
+            start_date=datetime.date(2026, 11, 16),
+            end_date=datetime.date(2026, 11, 16),
+            status=TimeOffRequest.Status.APPROVED
+        )
+        # Task pre-assigned to Alice
+        Task.objects.create(
+            company=self.company, project=self.project, name='Audit Prep',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        # Should be scheduled on an open day that is NOT Monday
+        shift = Schedule.objects.first()
+        self.assertNotEqual(shift.shift_date, datetime.date(2026, 11, 16))
+        self.assertEqual(shift.employee, self.employee)
+        self.assertTrue(len(res['warnings']) > 0)
+
+    def test_api_generate_endpoint(self):
+        Task.objects.create(
+            company=self.company, project=self.project, name='API Scheduled Task',
+            is_recurring=True, required_people=2, duration_hours=4.0
+        )
+        url = reverse('schedule-generate')
+        payload = {
+            'company_id': self.company.pk,
+            'week_start': '2026-11-16',
+            'clear_existing': True
+        }
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['company_id'], self.company.pk)
+        self.assertEqual(response.data['total_shifts_generated'], 10)  # 5 days * 2 people
+        self.assertEqual(response.data['unassigned_shifts'], 10)
+
+    def test_recurring_task_respects_employee_time_off(self):
+        # Alice is pre-assigned to recurring task
+        task = Task.objects.create(
+            company=self.company, project=self.project, name='Daily Front Desk',
+            is_recurring=True, required_people=1, duration_hours=8.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.OPEN_TO_CLOSE
+        )
+        # Alice is approved off on Wednesday Nov 18
+        TimeOffRequest.objects.create(
+            employee=self.employee,
+            start_date=datetime.date(2026, 11, 18),
+            end_date=datetime.date(2026, 11, 18),
+            status=TimeOffRequest.Status.APPROVED
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 5)
+        self.assertEqual(res['pre_assigned_shifts'], 4)  # Mon, Tue, Thu, Fri
+        self.assertEqual(res['unassigned_shifts'], 1)    # Wed
+
+        wed_shift = Schedule.objects.get(shift_date=datetime.date(2026, 11, 18))
+        self.assertIsNone(wed_shift.employee)  # Left unassigned for smart scheduler!
+        self.assertTrue(any('approved time-off' in w for w in res['warnings']))
+
+        mon_shift = Schedule.objects.get(shift_date=datetime.date(2026, 11, 16))
+        self.assertEqual(mon_shift.employee, self.employee)
+
+    def test_availability_hours_validation(self):
+        # Alice is only available on Monday from 09:00 to 13:00 (4 hours)
+        AvailabilitySlot.objects.create(
+            employee=self.employee,
+            day_of_week=0,  # Monday
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0)
+        )
+
+        # Task A: 09:00 - 13:00 (fits Alice's slot)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Morning Task',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # Task B: 09:00 - 17:00 (exceeds Alice's 13:00 end_time)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Full Day Task',
+            is_recurring=False, required_people=1, duration_hours=8.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.OPEN_TO_CLOSE
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        morning_shift = Schedule.objects.get(task__name='Morning Task')
+        self.assertEqual(morning_shift.employee, self.employee)
+
+        full_day_shift = Schedule.objects.get(task__name='Full Day Task')
+        self.assertIsNone(full_day_shift.employee)  # Left unassigned!
+        self.assertTrue(any('do not cover shift' in w for w in res['warnings']))
+
+    def test_flexible_task_concurrency_leveling_between_shifts(self):
+        # Anchor 1: Morning task 09:00 - 11:00 (BEGINNING_OF_DAY)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Morning Opening',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # Anchor 2: Evening task 15:00 - 17:00 (END_OF_DAY)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Evening Closing',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.END_OF_DAY
+        )
+        # Flexible task: 2 hours. Should fill the valley right at 11:00 - 13:00 with no pause
+        t_flex = Task.objects.create(
+            company=self.company, project=self.project, name='Midday Restock',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+
+        # Restrict to only Monday by zeroing other days
+        self.hours.tuesday_start = None
+        self.hours.tuesday_end = None
+        self.hours.wednesday_start = None
+        self.hours.wednesday_end = None
+        self.hours.thursday_start = None
+        self.hours.thursday_end = None
+        self.hours.friday_start = None
+        self.hours.friday_end = None
+        self.hours.save()
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        s_flex = Schedule.objects.get(task=t_flex)
+        self.assertEqual(s_flex.start_time, datetime.time(11, 0))
+        self.assertEqual(s_flex.end_time, datetime.time(13, 0))
+
+    def test_flexible_task_with_preassigned_employee_afternoon_availability(self):
+        # Alice is only available in the afternoon (13:00 - 17:00) on Monday
+        AvailabilitySlot.objects.create(
+            employee=self.employee,
+            day_of_week=0,  # Monday
+            start_time=datetime.time(13, 0),
+            end_time=datetime.time(17, 0)
+        )
+        # Only Monday open
+        self.hours.tuesday_start = None
+        self.hours.tuesday_end = None
+        self.hours.wednesday_start = None
+        self.hours.wednesday_end = None
+        self.hours.thursday_start = None
+        self.hours.thursday_end = None
+        self.hours.friday_start = None
+        self.hours.friday_end = None
+        self.hours.save()
+
+        # Flexible task of 3 hours pre-assigned to Alice
+        t_flex = Task.objects.create(
+            company=self.company, project=self.project, name='Afternoon Audit',
+            is_recurring=False, required_people=1, duration_hours=3.0,
+            employee=self.employee, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        s_flex = Schedule.objects.get(task=t_flex)
+        self.assertEqual(s_flex.employee, self.employee)
+        self.assertEqual(s_flex.start_time, datetime.time(13, 0))
+        self.assertEqual(s_flex.end_time, datetime.time(16, 0))
+        self.assertEqual(len(res['warnings']), 0)
+
+    def test_multi_person_task_at_same_time(self):
+        t_multi = Task.objects.create(
+            company=self.company, project=self.project, name='Group Floor Reset',
+            is_recurring=False, required_people=3, duration_hours=3.0,
+            preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+
+        # Restrict to Monday
+        self.hours.tuesday_start = None
+        self.hours.tuesday_end = None
+        self.hours.wednesday_start = None
+        self.hours.wednesday_end = None
+        self.hours.thursday_start = None
+        self.hours.thursday_end = None
+        self.hours.friday_start = None
+        self.hours.friday_end = None
+        self.hours.save()
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        shifts = list(Schedule.objects.filter(task=t_multi).order_by('id'))
+        self.assertEqual(len(shifts), 3)
+        # All 3 positions work at the exact same time
+        self.assertEqual(shifts[0].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[0].end_time, datetime.time(12, 0))
+        self.assertEqual(shifts[1].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[1].end_time, datetime.time(12, 0))
+        self.assertEqual(shifts[2].start_time, datetime.time(9, 0))
+        self.assertEqual(shifts[2].end_time, datetime.time(12, 0))
+
+    def test_inter_day_load_balancing_accounts_for_person_hours(self):
+        # Task 1: 4 hours, 2 people -> 8 person-hours.
+        # Placed on Monday (first open day with 0 hours)
+        Task.objects.create(
+            company=self.company, project=self.project, name='Two-Person Setup',
+            is_recurring=False, required_people=2, duration_hours=4.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        # Task 2: 4 hours, 1 person.
+        # Candidate days: Monday now has 8 scheduled person-hours, Tuesday has 0.
+        # Should pick Tuesday!
+        t2 = Task.objects.create(
+            company=self.company, project=self.project, name='Solo Followup',
+            is_recurring=False, required_people=1, duration_hours=4.0,
+            preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        service.generate()
+
+        t2_shift = Schedule.objects.get(task=t2)
+        # Week start is Nov 16 (Monday). Tuesday is Nov 17.
+        self.assertEqual(t2_shift.shift_date, datetime.date(2026, 11, 17))
+
+    def test_non_recurring_task_respects_preferred_day(self):
+        # Even though Mon, Tue, Wed have 0 load, task specifically requests Thursday (3)
+        t_pref = Task.objects.create(
+            company=self.company, project=self.project, name='Thursday Deep Clean',
+            is_recurring=False, required_people=1, duration_hours=3.0,
+            preferred_day=Task.Day.THURSDAY, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 1)
+        shift = Schedule.objects.get(task=t_pref)
+        # Thursday of week Nov 16 is Nov 19
+        self.assertEqual(shift.shift_date, datetime.date(2026, 11, 19))
+
+    def test_recurring_task_with_preferred_day_only_generates_on_that_weekday(self):
+        # A weekly recurring task that only runs every Wednesday (2)
+        t_rec = Task.objects.create(
+            company=self.company, project=self.project, name='Wednesday All-Hands',
+            is_recurring=True, required_people=1, duration_hours=1.0,
+            preferred_day=Task.Day.WEDNESDAY, preferred_window=Task.PreferredWindow.BEGINNING_OF_DAY
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        # Generates only 1 shift for the week on Wednesday Nov 18, rather than 5 on all open days
+        self.assertEqual(res['total_shifts_generated'], 1)
+        shift = Schedule.objects.get(task=t_rec)
+        self.assertEqual(shift.shift_date, datetime.date(2026, 11, 18))
+
+    def test_preferred_day_closed_falls_back_with_warning(self):
+        # Company closed on Saturday (5)
+        t_sat = Task.objects.create(
+            company=self.company, project=self.project, name='Weekend Promo',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_day=Task.Day.SATURDAY, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+        service = ShiftGeneratorService(company=self.company, week_start=self.week_start)
+        res = service.generate()
+
+        self.assertEqual(res['total_shifts_generated'], 1)
+        self.assertTrue(any('company is closed on that day' in w for w in res['warnings']))
+
+    def test_task_serializer_with_preferred_day(self):
+        task = Task.objects.create(
+            company=self.company, project=self.project, name='Task with Preferred Day',
+            is_recurring=False, required_people=1, duration_hours=2.0,
+            preferred_day=Task.Day.TUESDAY, preferred_window=Task.PreferredWindow.FLEXIBLE
+        )
+        serializer = TaskSerializer(task)
+        self.assertEqual(serializer.data['preferred_day'], 1)
+        self.assertEqual(serializer.data['preferred_day_name'], 'Tuesday')
+
+
+class ScheduleMultipleEmployeesTests(ScheduleApiBase):
+    def setUp(self):
+        super().setUp()
+        self.emp2 = make_employee('emp2@example.com', department=self.employee.department)
+        self.emp3 = make_employee('emp3@example.com', department=self.employee.department)
+        self.task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Multi Cashier',
+            required_people=2,
+            duration_hours=4.0
+        )
+
+    def test_create_schedule_with_list_of_employees(self):
+        payload = {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.employee.pk, self.emp2.pk],
+            'notes': 'Team shift'
+        }
+        res = self.client.post(self.list_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(res.data), 2)
+        # Check database rows (1-entry-per-employee)
+        db_rows = Schedule.objects.filter(task=self.task, shift_date=DAY)
+        self.assertEqual(db_rows.count(), 2)
+        assigned_ids = set(db_rows.values_list('employee_id', flat=True))
+        self.assertEqual(assigned_ids, {self.employee.pk, self.emp2.pk})
+
+    def test_create_schedule_with_open_slots_up_to_headcount(self):
+        # Task requires 2 people, but only 1 employee provided
+        payload = {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.employee.pk],
+            'notes': 'Partial team'
+        }
+        res = self.client.post(self.list_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(res.data), 2)
+        db_rows = Schedule.objects.filter(task=self.task, shift_date=DAY)
+        self.assertEqual(db_rows.count(), 2)
+        self.assertEqual(db_rows.filter(employee=self.employee).count(), 1)
+        self.assertEqual(db_rows.filter(employee__isnull=True).count(), 1)
+
+    def test_create_schedule_exceeding_headcount_rejected(self):
+        # Task requires 2 people, but 3 provided
+        payload = {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.employee.pk, self.emp2.pk, self.emp3.pk]
+        }
+        res = self.client.post(self.list_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('employees', res.data)
+        self.assertIn('Cannot add more than 2 employees', res.data['employees'][0])
+
+    def test_assign_employee_to_existing_schedule_entry(self):
+        # Create unassigned slot
+        Schedule.objects.create(
+            task=self.task, task_name=self.task.name, shift_date=DAY,
+            start_time='09:00', end_time='13:00', employee=self.employee
+        )
+        Schedule.objects.create(
+            task=self.task, task_name=self.task.name, shift_date=DAY,
+            start_time='09:00', end_time='13:00', employee=None
+        )
+        url = reverse('schedule-assign-employees')
+        res = self.client.post(url, {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.emp2.pk]
+        }, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # Now 2 employees are assigned, 0 unassigned
+        db_rows = Schedule.objects.filter(task=self.task, shift_date=DAY)
+        self.assertEqual(db_rows.filter(employee__isnull=False).count(), 2)
+        self.assertEqual(db_rows.filter(employee__isnull=True).count(), 0)
+
+        # Attempting to assign a 3rd employee exceeds headcount of 2
+        res2 = self.client.post(url, {
+            'task': self.task.pk,
+            'shift_date': DAY,
+            'start_time': '09:00',
+            'end_time': '13:00',
+            'employees': [self.emp3.pk]
+        }, format='json')
+        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('employees', res2.data)
+
+    def test_tasks_endpoint(self):
+        url = reverse('task-list')
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(any(t['name'] == 'Multi Cashier' for t in res.data))
+
+
+class SmartShiftAssignerApiTests(ScheduleApiBase):
+    def setUp(self):
+        super().setUp()
+        self.emp2 = make_employee('assignee2@example.com', department=self.employee.department)
+        # Operating hours
+        CompanyHours.objects.create(
+            company=self.employee.company,
+            monday_start=datetime.time(9, 0), monday_end=datetime.time(17, 0),
+            tuesday_start=datetime.time(9, 0), tuesday_end=datetime.time(17, 0),
+            wednesday_start=datetime.time(9, 0), wednesday_end=datetime.time(17, 0),
+            thursday_start=datetime.time(9, 0), thursday_end=datetime.time(17, 0),
+            friday_start=datetime.time(9, 0), friday_end=datetime.time(17, 0),
+        )
+        self.week_start = datetime.date(2026, 11, 16)  # Monday
+
+    def test_assign_shifts_api_fills_unassigned_slots(self):
+        # Create 2 unassigned schedule slots for Nov 16
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Floor Shift 1',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Floor Shift 2',
+            shift_date=self.week_start,
+            start_time=datetime.time(13, 0),
+            end_time=datetime.time(17, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['total_unassigned_slots'], 2)
+        self.assertEqual(res.data['slots_filled'], 2)
+        self.assertEqual(res.data['unfillable_slots'], 0)
+
+        s1.refresh_from_db()
+        s2.refresh_from_db()
+        self.assertIsNotNone(s1.employee)
+        self.assertIsNotNone(s2.employee)
+
+    def test_shift_auto_schedule_legacy_endpoint_delegates_to_assigner(self):
+        # Create unassigned slot
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Auto Scheduled Slot',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('shift_auto_schedule_api')
+        payload = {
+            'department': self.employee.department.pk,
+            'date_from': self.week_start.isoformat(),
+            'date_to': '2026-11-22',
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['created'], 1)
+        self.assertEqual(res.data['slots_filled'], 1)
+
+        s.refresh_from_db()
+        self.assertIsNotNone(s.employee)
+
+    def test_assign_shifts_respects_skills(self):
+        forklift = Skill.objects.create(company=self.employee.company, name='Forklift')
+        self.emp2.skills.add(forklift)
+        # self.employee does not have forklift skill
+
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Warehouse Loading',
+            required_people=1,
+            duration_hours=4.0
+        )
+        task.skills.add(forklift)
+
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task=task,
+            task_name=task.name,
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots_filled'], 1)
+
+        s.refresh_from_db()
+        self.assertEqual(s.employee, self.emp2)
+
+    def test_assign_shifts_respects_time_off(self):
+        TimeOffRequest.objects.create(
+            employee=self.employee,
+            start_date=self.week_start,
+            end_date=self.week_start,
+            status=TimeOffRequest.Status.APPROVED
+        )
+
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Daily Register',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots_filled'], 1)
+
+        s.refresh_from_db()
+        # self.employee is on leave, so self.emp2 must be assigned
+        self.assertEqual(s.employee, self.emp2)
+
+    def test_clear_assignments_endpoint(self):
+        # Create schedules with employees
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 1',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=self.employee,
+            status=Schedule.Status.SCHEDULED,
+        )
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 2',
+            shift_date=self.week_start + datetime.timedelta(days=1),
+            start_time=datetime.time(14, 0),
+            end_time=datetime.time(18, 0),
+            employee=self.emp2,
+            status=Schedule.Status.SCHEDULED,
+        )
+        url = reverse('schedule-clear-assignments')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['cleared_count'], 2)
+
+        s1.refresh_from_db()
+        s2.refresh_from_db()
+        self.assertIsNone(s1.employee)
+        self.assertIsNone(s2.employee)
+        # Shift records must still exist
+        self.assertEqual(Schedule.objects.filter(pk__in=[s1.pk, s2.pk]).count(), 2)
+
+    def test_clear_shifts_endpoint(self):
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 1',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=self.employee,
+            status=Schedule.Status.SCHEDULED,
+        )
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Shift 2',
+            shift_date=self.week_start + datetime.timedelta(days=2),
+            start_time=datetime.time(14, 0),
+            end_time=datetime.time(18, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+        url = reverse('schedule-clear-shifts')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['deleted_count'], 2)
+
+        self.assertEqual(Schedule.objects.filter(pk__in=[s1.pk, s2.pk]).count(), 0)
+
+    def test_skills_crud_and_independent_assignment(self):
+        # 1. Create a skill for the company via Skill API
+        url = reverse('skill-list')
+        res = self.client.post(url, {'name': 'First Aid', 'description': 'CPR & First Aid'}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        skill_id = res.data['id']
+        self.assertEqual(res.data['name'], 'First Aid')
+
+        skill = Skill.objects.get(pk=skill_id)
+        # Verify creating skill does NOT give it to all employees or all tasks
+        self.assertEqual(skill.employees.count(), 0)
+        self.assertEqual(skill.tasks.count(), 0)
+
+        # 2. Assign skill to an individual employee
+        emp_url = reverse('employee-detail', args=[self.emp2.pk])
+        emp_res = self.client.patch(emp_url, {'skills': [skill_id]}, format='json')
+        self.assertEqual(emp_res.status_code, status.HTTP_200_OK)
+        self.emp2.refresh_from_db()
+        self.employee.refresh_from_db()
+        self.assertIn(skill, self.emp2.skills.all())
+        self.assertNotIn(skill, self.employee.skills.all())
+
+        # 3. Assign skill to an individual task
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='First Aid Station',
+            required_people=1,
+            duration_hours=4.0
+        )
+        task_url = reverse('task-detail', args=[task.pk])
+        task_res = self.client.patch(task_url, {'skills': [skill_id]}, format='json')
+        self.assertEqual(task_res.status_code, status.HTTP_200_OK)
+        task.refresh_from_db()
+        self.assertIn(skill, task.skills.all())
+
+        # 4. Verify cross-company skill assignment is rejected
+        other_comp = Company.objects.create(name='Other Corp')
+        other_skill = Skill.objects.create(company=other_comp, name='Hazardous Materials')
+        bad_task_res = self.client.patch(task_url, {'skills': [other_skill.pk]}, format='json')
+        self.assertEqual(bad_task_res.status_code, status.HTTP_400_BAD_REQUEST)
+        bad_emp_res = self.client.patch(emp_url, {'skills': [other_skill.pk]}, format='json')
+        self.assertEqual(bad_emp_res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_assign_shifts_unfillable_when_no_employee_has_skill(self):
+        welding = Skill.objects.create(company=self.employee.company, name='Welding')
+        task = Task.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            name='Structural Welding',
+            required_people=1,
+            duration_hours=4.0
+        )
+        task.skills.add(welding)
+        # Neither self.employee nor self.emp2 has Welding skill
+
+        s = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task=task,
+            task_name=task.name,
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('schedule-assign')
+        payload = {
+            'company_id': self.employee.company.pk,
+            'week_start': self.week_start.isoformat(),
+            'department_id': self.employee.department.pk,
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots_filled'], 0)
+        self.assertEqual(res.data['unfillable_slots'], 1)
+        self.assertIn('Welding', res.data['unfillable_details'][0]['reason'])
+
+        s.refresh_from_db()
+        self.assertIsNone(s.employee)
+
+
+class SchedulePublicationApiTests(ScheduleApiBase):
+    def setUp(self):
+        super().setUp()
+        self.week_start = datetime.date(2026, 11, 23)  # Monday
+        self.emp2 = make_employee('pubemp2@example.com', department=self.employee.department)
+
+    def test_shift_publication_default_draft(self):
+        url = reverse('shift_publication_api')
+        res = self.client.get(url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertFalse(res.data['published'])
+        self.assertIsNone(res.data['published_at'])
+        self.assertIsNone(res.data['published_by'])
+        self.assertEqual(res.data['week_start'], self.week_start.isoformat())
+
+    def test_shift_review_metrics_and_warnings(self):
+        # 1 assigned shift (4 hours)
+        s1 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Morning Reception',
+            shift_date=self.week_start,
+            start_time=datetime.time(9, 0),
+            end_time=datetime.time(13, 0),
+            employee=self.employee,
+            status=Schedule.Status.SCHEDULED,
+        )
+        # 1 unassigned shift (open slot)
+        s2 = Schedule.objects.create(
+            company=self.employee.company,
+            department=self.employee.department,
+            task_name='Afternoon Reception',
+            shift_date=self.week_start,
+            start_time=datetime.time(13, 0),
+            end_time=datetime.time(17, 0),
+            employee=None,
+            status=Schedule.Status.SCHEDULED,
+        )
+
+        url = reverse('shift_review_api')
+        res = self.client.get(url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['slots'], 2)
+        self.assertEqual(res.data['filled'], 1)
+        self.assertEqual(res.data['open_slots'], 1)
+        self.assertEqual(res.data['shift_count'], 2)
+        self.assertTrue(len(res.data['open_shifts']) > 0)
+        self.assertIn('Afternoon Reception', res.data['open_shifts'][0])
+        self.assertTrue(len(res.data['people']) > 0)
+        self.assertEqual(res.data['people'][0]['hours'], 4.0)
+        self.assertTrue(any('still need an employee assigned' in w for w in res.data['warnings']))
+
+    def test_shift_publish_and_unpublish_workflow(self):
+        pub_url = reverse('shift_publish_api')
+        unpub_url = reverse('shift_unpublish_api')
+        check_url = reverse('shift_publication_api')
+
+        # 1. Publish week
+        pub_res = self.client.post(pub_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        }, format='json')
+        self.assertEqual(pub_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(pub_res.data['published'])
+        self.assertIsNotNone(pub_res.data['published_at'])
+
+        # Verify DB record
+        db_pub = SchedulePublication.objects.get(
+            company=self.employee.company,
+            department=self.employee.department,
+            week_start=self.week_start,
+        )
+        self.assertTrue(db_pub.published)
+
+        # Check status endpoint
+        check_res = self.client.get(check_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(check_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(check_res.data['published'])
+        self.assertIsNotNone(check_res.data['published_by'])
+
+        # 2. Revert / Unpublish week
+        unpub_res = self.client.post(unpub_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        }, format='json')
+        self.assertEqual(unpub_res.status_code, status.HTTP_200_OK)
+        self.assertFalse(unpub_res.data['published'])
+        self.assertIsNone(unpub_res.data['published_at'])
+
+        db_pub.refresh_from_db()
+        self.assertFalse(db_pub.published)
+
+        # Check status endpoint again
+        check_res2 = self.client.get(check_url, {
+            'department': self.employee.department.pk,
+            'week_start': self.week_start.isoformat(),
+        })
+        self.assertEqual(check_res2.status_code, status.HTTP_200_OK)
+        self.assertFalse(check_res2.data['published'])
+
+
+
+
+

@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
-
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { EmployeeDeleteConfirmComponent } from './employee-delete-confirm.component';
 
 describe('EmployeeDeleteConfirmComponent', () => {
@@ -11,6 +10,7 @@ describe('EmployeeDeleteConfirmComponent', () => {
     await TestBed.configureTestingModule({
       imports: [EmployeeDeleteConfirmComponent],
       providers: [
+        provideRouter([]),
         {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: { get: () => '1' } } }

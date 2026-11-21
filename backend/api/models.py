@@ -63,6 +63,8 @@ class EmployeeProfile(models.Model):
     position = models.CharField(max_length=255, blank=True)
     productivity_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     pay_rate = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    max_weekly_hours = models.DecimalField(max_digits=4, decimal_places=1, default=40.0, validators=[MinValueValidator(0.0)])
+    skills = models.ManyToManyField('Skill', blank=True, related_name='employees')
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
 
@@ -94,8 +96,11 @@ class Schedule(models.Model):
         COMPLETED = 'completed', 'Completed'
         CANCELLED = 'cancelled', 'Cancelled'
 
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, null=True, blank=True, related_name='schedules')
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, null=True, blank=True, related_name='schedules')
     task_name = models.CharField(max_length=255)
-    employee = models.ForeignKey(EmployeeProfile, on_delete=models.CASCADE, related_name='schedules')
+    task = models.ForeignKey('Task', on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
     shift_date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
@@ -107,8 +112,21 @@ class Schedule(models.Model):
     class Meta:
         ordering = ['shift_date', 'start_time', 'id']
 
+    def save(self, *args, **kwargs):
+        if self.task:
+            if getattr(self.task, 'company_id', None):
+                self.company = self.task.company
+            if getattr(self.task, 'department_id', None):
+                self.department = self.task.department
+            if not self.task_name:
+                self.task_name = self.task.name
+        if not self.company_id and self.department and getattr(self.department, 'company_id', None):
+            self.company = self.department.company
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f'{self.task_name}: {self.employee} {self.shift_date} {self.start_time}-{self.end_time}'
+        emp = self.employee if self.employee else 'Unassigned'
+        return f'{self.task_name}: {emp} {self.shift_date} {self.start_time}-{self.end_time}'
 
 
 class CompatibilityScore(models.Model):
@@ -209,3 +227,104 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Skill(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='skills')
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.name
+
+
+Skills = Skill
+
+
+class Task(models.Model):
+    class PreferredWindow(models.TextChoices):
+        FLEXIBLE = 'flexible', 'Flexible'
+        BEGINNING_OF_DAY = 'beginning_of_day', 'Beginning of Day'
+        MID_DAY = 'mid_day', 'Mid-Day'
+        END_OF_DAY = 'end_of_day', 'End of Day'
+        OPEN_TO_CLOSE = 'open_to_close', 'Open to Close'
+
+    class Day(models.IntegerChoices):
+        MONDAY = 0, 'Monday'
+        TUESDAY = 1, 'Tuesday'
+        WEDNESDAY = 2, 'Wednesday'
+        THURSDAY = 3, 'Thursday'
+        FRIDAY = 4, 'Friday'
+        SATURDAY = 5, 'Saturday'
+        SUNDAY = 6, 'Sunday'
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='tasks')
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    priority = models.CharField(max_length=10, choices=Project.Priority.choices, default=Project.Priority.MEDIUM)
+    preferred_window = models.CharField(max_length=20, choices=PreferredWindow.choices,
+                                         default=PreferredWindow.FLEXIBLE)
+    preferred_day = models.SmallIntegerField(choices=Day.choices, null=True, blank=True, default=None)
+    is_recurring = models.BooleanField(default=False)
+    required_people = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    duration_hours = models.DecimalField(max_digits=4, decimal_places=2, default=1.0, validators=[MinValueValidator(0.25)])
+    skills = models.ManyToManyField(Skill, blank=True, related_name='tasks')
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+
+    def __str__(self):
+        return self.name
+
+
+Tasks = Task
+
+
+class CompanyHours(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='company_hours')
+    monday_start = models.TimeField(null=True, blank=True)
+    monday_end = models.TimeField(null=True, blank=True)
+    tuesday_start = models.TimeField(null=True, blank=True)
+    tuesday_end = models.TimeField(null=True, blank=True)
+    wednesday_start = models.TimeField(null=True, blank=True)
+    wednesday_end = models.TimeField(null=True, blank=True)
+    thursday_start = models.TimeField(null=True, blank=True)
+    thursday_end = models.TimeField(null=True, blank=True)
+    friday_start = models.TimeField(null=True, blank=True)
+    friday_end = models.TimeField(null=True, blank=True)
+    saturday_start = models.TimeField(null=True, blank=True)
+    saturday_end = models.TimeField(null=True, blank=True)
+    sunday_start = models.TimeField(null=True, blank=True)
+    sunday_end = models.TimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name_plural = 'company hours'
+
+    def __str__(self):
+        return f'{self.company.name} Hours'
+
+
+company_hours = CompanyHours
+
+
+class SchedulePublication(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='schedule_publications')
+    department = models.ForeignKey(Department, on_delete=models.CASCADE, null=True, blank=True, related_name='schedule_publications')
+    week_start = models.DateField(help_text="Monday of the scheduled week")
+    published = models.BooleanField(default=False)
+    published_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='published_schedules')
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'schedule publication'
+        verbose_name_plural = 'schedule publications'
+        unique_together = ('company', 'department', 'week_start')
+        ordering = ['-week_start']
+
+    def __str__(self):
+        dept_str = self.department.name if self.department else 'All Departments'
+        status_str = 'Published' if self.published else 'Draft'
+        return f"{self.company.name} - {dept_str} - Week of {self.week_start} ({status_str})"
+

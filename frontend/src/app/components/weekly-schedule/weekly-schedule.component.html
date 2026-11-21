@@ -1,0 +1,1465 @@
+<div class="max-w-7xl mx-auto" (keydown.escape)="closePanel()">
+  <!-- Heading -->
+  <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        @if (deptName) {
+          <span class="px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-bold tracking-wider uppercase" data-testid="dept-label">{{ deptId === null ? 'All departments' : deptName + ' department' }}</span>
+        }
+        @if (!canEdit) {
+          <span class="px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium" data-testid="view-only">View only</span>
+        }
+      </div>
+      <h1 class="text-4xl font-extrabold tracking-tight text-slate-900">Weekly Schedule</h1>
+      <p class="text-sm text-slate-500 mt-1">{{ rangeLabel }}</p>
+    </div>
+
+    <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl shadow-sm p-1.5">
+      <button type="button" (click)="goToWeek(-1)" aria-label="Previous week" class="h-9 w-9 rounded-lg bg-slate-100 hover:bg-slate-200 cursor-pointer">&lsaquo;</button>
+      <a routerLink="/schedules" title="Pick another week" class="px-3 h-9 inline-flex items-center gap-2 text-sm font-semibold text-slate-800 no-underline">
+        <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M4 11h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"/></svg>
+        {{ shortRange }}
+      </a>
+      <button type="button" (click)="goToWeek(1)" aria-label="Next week" class="h-9 w-9 rounded-lg bg-slate-100 hover:bg-slate-200 cursor-pointer">&rsaquo;</button>
+    </div>
+  </div>
+
+  <!-- 1. Dedicated Filtering Line -->
+  <div class="bg-white border border-slate-200 rounded-2xl p-3.5 mb-4 shadow-2xs flex flex-wrap items-center justify-between gap-3" data-testid="filtering-toolbar">
+    <!-- Department Multi-select Filtering -->
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mr-1">
+        <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.41A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z"/>
+        </svg>
+        <span>Departments:</span>
+      </div>
+
+      <!-- "All Departments" pill -->
+      <button type="button"
+              (click)="toggleDept(null)"
+              class="h-9 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              [class]="selectedDeptIds().length === 0 ? 'bg-brand-600 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'"
+              data-testid="dept-pill-all">
+        All
+      </button>
+
+      <!-- Department multi-select pills -->
+      @for (d of departments; track d.id) {
+        <button type="button"
+                (click)="toggleDept(d.id)"
+                class="h-9 px-3 rounded-lg text-xs font-semibold cursor-pointer transition-all flex items-center gap-1.5"
+                [class]="isDeptSelected(d.id)
+                  ? 'bg-brand-600 text-white shadow-xs ring-1 ring-brand-700'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-transparent'"
+                [attr.data-testid]="'dept-pill-' + d.id"
+                [attr.aria-pressed]="isDeptSelected(d.id)">
+          @if (isDeptSelected(d.id)) {
+            <span class="text-[10px]">&#10003;</span>
+          }
+          <span>{{ d.name }}</span>
+          @if (isStaff && !runs(d.id)) {
+            <span class="text-[9px] opacity-75 font-normal">(view only)</span>
+          }
+          @if (!isStaff && d.id === homeId) {
+            <span class="text-[9px] opacity-75 font-normal">(home)</span>
+          }
+        </button>
+      }
+
+      @if (selectedDeptIds().length > 1) {
+        <span class="text-xs font-medium text-slate-500 bg-slate-100 rounded-lg px-2 py-1">
+          {{ selectedDeptIds().length }} selected
+        </span>
+      }
+
+      <!-- Select dropdown for quick selection / testing fallback -->
+      @if (departments.length > 0) {
+        <select id="dept-select"
+                [(ngModel)]="deptId"
+                (ngModelChange)="onDeptDropdownChange($event)"
+                name="deptSelect"
+                class="sr-only"
+                data-testid="dept-select"
+                aria-label="Department selection dropdown">
+          <option [ngValue]="null">All departments</option>
+          @for (d of departments; track d.id) {
+            <option [ngValue]="d.id">{{ d.name }}{{ isStaff && !runs(d.id) ? ' (view only)' : '' }}{{ !isStaff && d.id === homeId ? ' (home)' : '' }}</option>
+          }
+        </select>
+      }
+    </div>
+
+    <!-- Search Bar on dedicated filtering line -->
+    <div class="flex items-center gap-2">
+      <div class="relative">
+        <input type="text"
+               [ngModel]="scheduleSearch()"
+               (ngModelChange)="scheduleSearch.set($event)"
+               name="scheduleSearch"
+               placeholder="Search shifts, staff, tasks…"
+               class="h-9 pl-8 pr-7 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 w-52 sm:w-64"
+               data-testid="schedule-search">
+        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+        </svg>
+        @if (scheduleSearch()) {
+          <button type="button"
+                  (click)="scheduleSearch.set('')"
+                  class="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                  title="Clear search">&times;</button>
+        }
+      </div>
+
+      @if (scheduleSearch() || selectedDeptIds().length > 0) {
+        <button type="button"
+                (click)="resetFilters()"
+                class="h-9 px-2.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 text-xs font-medium cursor-pointer"
+                title="Reset all filters"
+                data-testid="reset-filters">
+          Reset
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- 2. Management & Generation Toolbar (Same Line: Add shift, Generation, Assignment, Templates, Hours) -->
+  @if (canEdit) {
+    <div class="flex flex-wrap items-center gap-2.5 mb-2.5" data-testid="management-actions-row">
+      <button type="button" (click)="openAdd()" class="h-9 px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer shadow-xs" data-testid="add-shift">+ Add shift</button>
+      <button type="button" (click)="openShiftGeneration()" class="h-9 px-4 rounded-lg border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-semibold cursor-pointer" data-testid="shift-generation" title="Generate weekly shifts from tasks">Smart Shift Generation</button>
+      <button type="button" (click)="openShiftAssignment()" class="h-9 px-4 rounded-lg border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-semibold cursor-pointer" data-testid="shift-assignment" [attr.data-testid]="'auto-schedule'" title="Assign employees to open shift slots">Smart Shift Assignment</button>
+      <button type="button" (click)="openTemplates()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="templates">Shift templates</button>
+      @if (isCeo) {
+        <button type="button" (click)="openHours()" class="h-9 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 cursor-pointer" data-testid="hours">Hours of operation</button>
+      }
+    </div>
+
+    <!-- 3. Clear / Reset Actions (Dedicated Separate Line for Clarity) -->
+    <div class="flex flex-wrap items-center gap-2.5 mb-5 pt-0.5" data-testid="clear-actions-row">
+      <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mr-1 select-none">
+        <svg class="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        Reset:
+      </span>
+      <button type="button" (click)="openClearAssignments()" class="h-9 px-3.5 rounded-lg border border-rose-300 text-rose-700 bg-rose-50/50 hover:bg-rose-100/70 text-xs font-semibold cursor-pointer transition-colors" data-testid="clear-assignments" title="Unassign all employees from shifts this week">Clear all assignments</button>
+      <button type="button" (click)="openClearShifts()" class="h-9 px-3.5 rounded-lg border border-red-300 text-red-700 bg-red-50/50 hover:bg-red-100/70 text-xs font-semibold cursor-pointer transition-colors" data-testid="clear-shifts" title="Delete all shift entries for this week">Clear all shifts</button>
+    </div>
+  }
+
+  @if (clearSuccess) {
+    <div class="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-sm flex items-center justify-between" data-testid="clear-success">
+      <span>{{ clearSuccess }}</span>
+      <button type="button" (click)="clearSuccess = ''" class="text-emerald-700 font-bold hover:underline cursor-pointer" aria-label="Dismiss">&times;</button>
+    </div>
+  }
+
+  @if (autoError) { <div class="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-sm" data-testid="auto-error">{{ autoError }}</div> }
+  @if (loadError()) { <div class="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-sm">{{ loadError() }}</div> }
+
+  <!-- Shift Generation Modal -->
+  @if (shiftGenPrompt) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" (click)="closeShiftGeneration()">
+      <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center space-y-4" (click)="$event.stopPropagation()" role="dialog" aria-label="Shift Generation" data-testid="shift-gen-modal">
+        <div class="w-12 h-12 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center mx-auto text-xl font-bold">⚙</div>
+
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Shift Generation</h2>
+          <p class="text-xs text-slate-500">{{ shortRange }} · {{ deptId === null ? 'All departments' : deptName }}</p>
+        </div>
+
+        <!-- Disclaimer Banner -->
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-left flex gap-3 text-amber-900" data-testid="shift-gen-disclaimer">
+          <span class="text-amber-600 font-bold text-base flex-shrink-0">⚠️</span>
+          <div class="text-xs space-y-1">
+            <p class="font-bold">Draft Schedule Disclaimer</p>
+            <p class="text-amber-800 leading-relaxed">
+              Automated shift generation creates an initial draft based on active project tasks and operating hours. It is not perfect and is meant to be reviewed and adjusted before publishing.
+            </p>
+          </div>
+        </div>
+
+        @if (shiftGenBusy) {
+          <!-- Short Loading State -->
+          <div class="py-8 flex flex-col items-center justify-center space-y-3" data-testid="shift-gen-loading">
+            <div class="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+            <div class="space-y-1">
+              <p class="text-sm font-semibold text-slate-800">Generating shifts…</p>
+              <p class="text-xs text-slate-500">Evaluating tasks, operating hours, and headcount</p>
+            </div>
+          </div>
+        } @else {
+          @if (shiftGenResult; as res) {
+            <!-- Results Summary -->
+            <div class="space-y-3 text-left" data-testid="shift-gen-result">
+              <div class="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-medium text-center">
+                Generated {{ res.total_shifts_generated }} shift slot{{ res.total_shifts_generated === 1 ? '' : 's' }} across {{ res.days_with_shifts.length }} day{{ res.days_with_shifts.length === 1 ? '' : 's' }}.
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 text-center">
+                <div class="rounded-lg bg-slate-50 border border-slate-200 py-2">
+                  <div class="text-xl font-extrabold text-slate-900" data-testid="shift-gen-total">{{ res.total_shifts_generated }}</div>
+                  <div class="text-[11px] text-slate-500">total slots</div>
+                </div>
+                <div class="rounded-lg bg-slate-50 border border-slate-200 py-2">
+                  <div class="text-xl font-extrabold text-slate-900" data-testid="shift-gen-preassigned">{{ res.pre_assigned_shifts }}</div>
+                  <div class="text-[11px] text-slate-500">pre-assigned</div>
+                </div>
+                <div class="rounded-lg bg-brand-50 border border-brand-200 py-2">
+                  <div class="text-xl font-extrabold text-brand-700" data-testid="shift-gen-unassigned">{{ res.unassigned_shifts }}</div>
+                  <div class="text-[11px] text-brand-600 font-medium">unassigned</div>
+                </div>
+              </div>
+
+              @if (res.warnings && res.warnings.length > 0) {
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1" data-testid="shift-gen-warnings">
+                  <p class="text-xs font-semibold text-amber-900">Notes &amp; Warnings:</p>
+                  <ul class="list-disc pl-4 text-[11px] text-amber-800 space-y-0.5">
+                    @for (w of res.warnings; track $index) {
+                      <li>{{ w }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+
+              <p class="text-xs text-slate-500 text-center">
+                The schedule has been updated. Review each shift slot and assign staff as needed.
+              </p>
+
+              <div class="flex justify-center pt-2">
+                <button type="button" (click)="closeShiftGeneration()" class="px-5 h-9 rounded-lg bg-brand-600 text-white text-sm font-semibold cursor-pointer hover:bg-brand-700" data-testid="shift-gen-close">Review Schedule</button>
+              </div>
+            </div>
+          } @else {
+            <!-- Configuration / Prompt -->
+            @if (shiftGenError) {
+              <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs text-left" data-testid="shift-gen-error">
+                {{ shiftGenError }}
+              </div>
+            }
+
+            <div class="text-xs text-slate-600 text-left bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2">
+              <p>
+                Generate weekly shift slots from active project tasks matching the operating hours for this week.
+              </p>
+              <div class="pt-1 text-[11px] text-slate-500 space-y-0.5">
+                <div><span class="font-medium text-slate-700">Scope:</span> {{ deptId === null ? 'All departments' : deptName }}</div>
+                <div><span class="font-medium text-slate-700">Target Week:</span> {{ shortRange }}</div>
+              </div>
+            </div>
+
+            <label class="flex items-center gap-2.5 text-xs text-slate-700 text-left cursor-pointer select-none">
+              <input type="checkbox" [(ngModel)]="shiftGenClearExisting" name="shiftGenClearExisting" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500" data-testid="shift-gen-clear-existing">
+              <span>Replace existing scheduled shifts for this week</span>
+            </label>
+
+            <div class="flex justify-end gap-2 pt-2">
+              <button type="button" (click)="closeShiftGeneration()" class="px-4 h-9 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer" data-testid="shift-gen-cancel">Cancel</button>
+              <button type="button" (click)="generateWeeklyShifts()" class="px-5 h-9 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer" data-testid="shift-gen-submit">Generate Shifts</button>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Smart Shift Assignment Modal -->
+  @if (shiftAssignPrompt) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" (click)="closeShiftAssignment()">
+      <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center space-y-4" (click)="$event.stopPropagation()" role="dialog" aria-label="Smart Shift Assignment" data-testid="shift-assign-modal" [attr.data-testid]="'auto-result'">
+        <div class="w-12 h-12 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center mx-auto text-xl font-bold">✨</div>
+
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Smart Shift Assignment</h2>
+          <p class="text-xs text-slate-500">{{ shortRange }} · {{ deptId === null ? 'All departments' : deptName }}</p>
+        </div>
+
+        <!-- Disclaimer Banner (shown in prompt, loading, and result) -->
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-left flex gap-3 text-amber-900" data-testid="shift-assign-disclaimer">
+          <span class="text-amber-600 font-bold text-base flex-shrink-0">⚠️</span>
+          <div class="text-xs space-y-1">
+            <p class="font-bold">Smart Assignment Disclaimer</p>
+            <p class="text-amber-800 leading-relaxed">
+              Automated shift assignment uses optimization algorithms to match employees with open shifts based on availability, preferences, and company rules. It is not perfect and is meant to be reviewed and adjusted before publishing.
+            </p>
+          </div>
+        </div>
+
+        @if (shiftAssignBusy) {
+          <!-- Loading State -->
+          <div class="py-8 flex flex-col items-center justify-center space-y-3" data-testid="shift-assign-loading">
+            <div class="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+            <div class="space-y-1">
+              <p class="text-sm font-semibold text-slate-800">Assigning shifts…</p>
+              <p class="text-xs text-slate-500">Matching employees based on availability, hours, and department roles</p>
+            </div>
+          </div>
+        } @else {
+          @if (shiftAssignResult; as res) {
+            <!-- Results Summary -->
+            <div class="space-y-3 text-left" data-testid="shift-assign-result">
+              <div class="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
+                <span class="font-medium text-emerald-900" data-testid="auto-summary">
+                  Assigned {{ res.slots_filled }} of {{ res.total_unassigned_slots }} open spot{{ res.total_unassigned_slots === 1 ? '' : 's' }}.
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider text-[11px]"
+                      [class]="res.solver_status === 'OPTIMAL' ? 'bg-emerald-200 text-emerald-800' : 'bg-blue-100 text-blue-800'"
+                      data-testid="shift-assign-status">
+                  Feasibility: {{ res.solver_status }}
+                </span>
+              </div>
+
+              <!-- Stats Cards -->
+              <div class="grid grid-cols-3 gap-2 text-center">
+                <div class="rounded-lg bg-emerald-50 border border-emerald-200 py-2">
+                  <div class="text-xl font-extrabold text-emerald-700" data-testid="shift-assign-filled">{{ res.slots_filled }}</div>
+                  <div class="text-[11px] text-emerald-600 font-medium">filled</div>
+                </div>
+                <div class="rounded-lg bg-slate-50 border border-slate-200 py-2">
+                  <div class="text-xl font-extrabold text-slate-900" data-testid="shift-assign-open-before">{{ res.total_unassigned_slots }}</div>
+                  <div class="text-[11px] text-slate-500">open before</div>
+                </div>
+                <div class="rounded-lg border py-2" [class]="res.unfillable_slots > 0 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'">
+                  <div class="text-xl font-extrabold" [class]="res.unfillable_slots > 0 ? 'text-amber-700' : 'text-slate-900'" data-testid="shift-assign-open-after">{{ res.unfillable_slots }}</div>
+                  <div class="text-[11px] text-slate-500">still open</div>
+                </div>
+              </div>
+
+              @if (res.average_compatibility_score !== null && res.average_compatibility_score !== undefined) {
+                <div class="p-2.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs text-blue-900" data-testid="shift-assign-compatibility">
+                  <span class="font-medium">Team Compatibility Score:</span>
+                  <span class="font-bold text-blue-700 text-sm">{{ res.average_compatibility_score }} / 10</span>
+                </div>
+              }
+
+              <!-- Who was assigned to what -->
+              @if (res.assigned_shifts && res.assigned_shifts.length > 0) {
+                <div class="space-y-1.5 text-left" data-testid="shift-assign-assignments">
+                  <div class="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span>Assigned Shifts ({{ res.assigned_shifts.length }}):</span>
+                    <span class="text-slate-500 text-[11px]">Employee &rarr; Shift</span>
+                  </div>
+                  <div class="max-h-48 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1 bg-slate-50">
+                    @for (s of res.assigned_shifts; track s.schedule_id) {
+                      <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-white border border-slate-200 shadow-xs">
+                        <span class="font-semibold text-slate-800">{{ s.employee_name }}</span>
+                        <span class="text-slate-500 text-[11px]">{{ s.task_name || 'Shift' }} · {{ s.shift_date }} ({{ s.start_time }}-{{ s.end_time }})</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              @if (res.unfillable_details && res.unfillable_details.length > 0) {
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-left" data-testid="shift-assign-unfillable">
+                  <p class="text-xs font-semibold text-amber-900">Unfillable Slots ({{ res.unfillable_details.length }}):</p>
+                  <ul class="list-disc pl-4 text-[11px] text-amber-800 space-y-0.5 max-h-28 overflow-y-auto">
+                    @for (u of res.unfillable_details; track $index) {
+                      <li>{{ u.task_name || 'Shift' }} on {{ u.shift_date }} ({{ u.start_time }}-{{ u.end_time }}): {{ u.reason }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+
+              <p class="text-xs text-slate-500 text-center">
+                Review the assigned shifts below and make any necessary adjustments before publishing.
+              </p>
+
+              <div class="flex justify-center pt-2">
+                <button type="button" (click)="closeShiftAssignment()" class="px-5 h-9 rounded-lg bg-brand-600 text-white text-sm font-semibold cursor-pointer hover:bg-brand-700" data-testid="shift-assign-close" [attr.data-testid]="'auto-close'">Review Schedule</button>
+              </div>
+            </div>
+          } @else {
+            <!-- Prompt State -->
+            @if (shiftAssignError) {
+              <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs text-left" data-testid="shift-assign-error">
+                {{ shiftAssignError }}
+              </div>
+            }
+
+            <div class="text-xs text-slate-600 text-left bg-slate-50 rounded-xl p-3 border border-slate-200 space-y-2">
+              <p>
+                Automatically assign available employees to open shift slots for this week using constraint satisfaction and compatibility scores.
+              </p>
+              <div class="pt-1 text-[11px] text-slate-500 space-y-0.5">
+                <div><span class="font-medium text-slate-700">Scope:</span> {{ deptId === null ? 'All departments' : deptName }}</div>
+                <div><span class="font-medium text-slate-700">Target Week:</span> {{ shortRange }}</div>
+                <div><span class="font-medium text-slate-700">Open Slots to Assign:</span> <span class="font-semibold text-slate-900">{{ openSlots() }}</span></div>
+              </div>
+            </div>
+
+            @if (openSlots() === 0) {
+              <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl text-left text-xs text-blue-800">
+                There are currently no open shift slots in this week. You can generate shifts with <strong>Smart Shift Generation</strong>, add a shift manually, or clear existing assignments using <strong>Clear all assignments</strong>.
+              </div>
+            }
+
+            <div class="flex justify-end gap-2 pt-2">
+              <button type="button" (click)="closeShiftAssignment()" class="px-4 h-9 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer" data-testid="shift-assign-cancel">Cancel</button>
+              <button type="button" (click)="executeShiftAssignment()" [disabled]="openSlots() === 0" class="px-5 h-9 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" data-testid="shift-assign-submit">Assign Shifts</button>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Clear Assignments Confirmation Modal -->
+  @if (clearPrompt) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" (click)="closeClearAssignments()">
+      <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center space-y-4" (click)="$event.stopPropagation()" role="dialog" aria-label="Clear All Assignments" data-testid="clear-assignments-modal">
+        <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mx-auto text-xl font-bold">🗑️</div>
+
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Clear All Assignments?</h2>
+          <p class="text-xs text-slate-500">{{ shortRange }} · {{ deptId === null ? 'All departments' : deptName }}</p>
+        </div>
+
+        <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-left text-xs text-rose-900 space-y-1">
+          <p class="font-bold">Are you sure you want to clear assignments?</p>
+          <p class="leading-relaxed">
+            This will remove all employee assignments from scheduled shifts for this week, leaving all shifts as open unassigned slots. The shifts themselves will not be deleted.
+          </p>
+        </div>
+
+        @if (clearError) {
+          <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs text-left" data-testid="clear-error">
+            {{ clearError }}
+          </div>
+        }
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" (click)="closeClearAssignments()" [disabled]="clearBusy" class="px-4 h-9 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer disabled:opacity-50" data-testid="clear-cancel">Cancel</button>
+          <button type="button" (click)="confirmClearAssignments()" [disabled]="clearBusy" class="px-5 h-9 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="clear-submit">
+            {{ clearBusy ? 'Clearing…' : 'Clear All Assignments' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Clear Shifts Confirmation Modal (Delete all entries for the week) -->
+  @if (clearShiftsPrompt) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" (click)="closeClearShifts()">
+      <div class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center space-y-4" (click)="$event.stopPropagation()" role="dialog" aria-label="Clear All Shifts" data-testid="clear-shifts-modal">
+        <div class="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center mx-auto text-xl font-bold">🗑️</div>
+
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Clear All Shift Entries?</h2>
+          <p class="text-xs text-slate-500">{{ shortRange }} · {{ deptId === null ? 'All departments' : deptName }}</p>
+        </div>
+
+        <div class="p-3 bg-red-50 border border-red-200 rounded-xl text-left text-xs text-red-900 space-y-1">
+          <p class="font-bold">Are you sure you want to delete all shift entries?</p>
+          <p class="leading-relaxed">
+            This will permanently delete all scheduled shifts for this week. This includes both open and assigned shifts. You will be left with an empty schedule for this week. This action cannot be undone.
+          </p>
+        </div>
+
+        @if (clearShiftsError) {
+          <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs text-left" data-testid="clear-shifts-error">
+            {{ clearShiftsError }}
+          </div>
+        }
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" (click)="closeClearShifts()" [disabled]="clearShiftsBusy" class="px-4 h-9 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50 cursor-pointer disabled:opacity-50" data-testid="clear-shifts-cancel">Cancel</button>
+          <button type="button" (click)="confirmClearShifts()" [disabled]="clearShiftsBusy" class="px-5 h-9 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="clear-shifts-submit">
+            {{ clearShiftsBusy ? 'Deleting…' : 'Delete All Shifts' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Draft / posted -->
+  @if (pub(); as p) {
+    @if (isStaff) {
+      @if (!p.published) {
+        <div class="mb-5 flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50" data-testid="draft-banner">
+          <div>
+            <div class="text-sm font-bold text-amber-900">Draft - employees cannot see this week yet</div>
+            <div class="text-xs text-amber-800">{{ canEdit ? 'Build the schedule, then review and post it. Nobody is told about shifts until you post.' : 'Only managers can see this week until the department\'s manager posts it.' }}</div>
+          </div>
+          @if (canEdit) {
+            <button type="button" (click)="openPost()" class="h-10 px-4 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold cursor-pointer" data-testid="post-week">Review &amp; post schedule</button>
+          }
+        </div>
+      } @else {
+        <div class="mb-5 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-brand-300 bg-brand-50 text-brand-800 text-xs font-semibold" data-testid="posted-badge">
+          <span>&#10003; Posted {{ postedOn(p) }}{{ p.published_by ? ' by ' + p.published_by : '' }} - changes you make now show to employees right away</span>
+          @if (canEdit) {
+            <button type="button" (click)="unpublishWeek()" [disabled]="postBusy" class="ml-2 px-2.5 py-0.5 rounded-full text-xs text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 font-medium cursor-pointer transition-colors" data-testid="revert-draft-btn">
+              Revert to draft
+            </button>
+          }
+        </div>
+      }
+    }
+  }
+  @if (notPosted) {
+    <div class="p-10 text-center bg-white rounded-2xl border border-slate-200 shadow-sm" data-testid="not-posted">
+      <div class="text-lg font-bold text-slate-900">This week's schedule has not been posted yet</div>
+      <p class="text-sm text-slate-500 mt-1">Your manager is still working on it. You will get a notification when it is posted.</p>
+    </div>
+  } @else {
+
+  <!-- Stat cards -->
+  <div class="grid gap-4 mb-5" [class]="isStaff ? 'sm:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center gap-4">
+      <span class="w-11 h-11 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center">
+        <img src="/icon_employee.png" alt="Scheduled slots" class="w-6 h-6 object-contain" />
+      </span>
+      <div><div class="text-sm text-slate-500">Scheduled slots</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-scheduled">{{ scheduledSlots() }}</div></div>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center gap-4">
+      <span class="w-11 h-11 rounded-xl border-2 border-dashed border-slate-600 text-slate-700 flex items-center justify-center text-xl">+</span>
+      <div><div class="text-sm text-slate-500">Open shifts</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-open">{{ openSlots() }}</div></div>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center gap-4">
+      <span class="w-11 h-11 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center">
+        <img src="/icon_clock.png" alt="Coverage hours" class="w-6 h-6 object-contain" />
+      </span>
+      <div><div class="text-sm text-slate-500">Coverage hours</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-hours">{{ coverageText }}</div></div>
+    </div>
+    @if (!isStaff) {
+      <div class="bg-white rounded-2xl border border-brand-300 shadow-sm px-5 py-4 flex items-center gap-4">
+        <span class="w-11 h-11 rounded-xl bg-brand-600 text-white flex items-center justify-center">
+          <img src="/icon_white_clock.png" alt="Your hours" class="w-6 h-6 object-contain" />
+        </span>
+        <div><div class="text-sm text-slate-500">Your hours this week</div><div class="text-2xl font-extrabold text-slate-900" data-testid="stat-my-hours">{{ myHours() }}</div></div>
+      </div>
+    }
+  </div>
+
+  <!-- Calendar -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 text-sm text-slate-600">
+      <div class="flex items-center gap-5">
+        @if (view() !== 'stats') {
+          <span class="flex items-center gap-2" data-testid="legend-mine"><span class="inline-block w-4 h-4 rounded bg-brand-200 border-l-4 border-brand-600"></span>Your shift</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded bg-slate-300"></span>Scheduled</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-4 h-4 rounded border-2 border-dashed border-slate-500"></span>Open shift</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-brand-500"></span>Today</span>
+          <span class="flex items-center gap-2"><span class="inline-block px-1.5 rounded border border-brand-300 bg-brand-50 text-brand-800 text-[11px] font-semibold">Name</span></span>
+          <span class="flex items-center gap-2" data-testid="legend-minor"><span class="inline-block px-1.5 rounded border border-yellow-400 bg-yellow-100 text-yellow-800 text-[11px] font-semibold">Name</span>Under 18</span>
+        } @else {
+          <div class="flex items-center gap-2 text-slate-800 font-bold text-sm">
+            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+            </svg>
+            <span>Hours Distribution &amp; Schedule Analytics</span>
+          </div>
+        }
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        @if (view() !== 'stats') {
+          <span class="text-xs text-slate-400">{{ canEdit ? 'Click a shift to assign people or edit it' : isStaff ? 'Click a shift to see who is working' : 'Click a shift to see who is working or make a request' }}</span>
+        }
+        @if (!isStaff) {
+          <button type="button" (click)="showAll.set(!showAll())" class="h-8 px-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 cursor-pointer" data-testid="show-all" [attr.aria-pressed]="showAll()">{{ showAll() ? 'Show only my shifts' : 'Show all shifts' }}</button>
+        }
+        <div class="inline-flex rounded-lg border border-slate-300 overflow-hidden" role="group" aria-label="Schedule layout">
+          <button type="button" (click)="setView('grid')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'grid' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-grid" [attr.aria-pressed]="view() === 'grid'">Grid</button>
+          <button type="button" (click)="setView('list')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'list' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-list" [attr.aria-pressed]="view() === 'list'">List</button>
+          <button type="button" (click)="setView('stats')" [class]="'h-8 px-3 text-xs font-semibold cursor-pointer ' + (view() === 'stats' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')" data-testid="view-stats" [attr.aria-pressed]="view() === 'stats'">Stats</button>
+        </div>
+      </div>
+    </div>
+
+    @if (view() === 'list') {
+      <div class="p-4 space-y-4" data-testid="list-view">
+        @for (d of listDays(); track d.day.iso) {
+          <section [attr.data-testid]="'list-day-' + d.day.iso">
+            <h3 class="flex items-center gap-2 text-sm font-bold mb-2" [class.text-brand-800]="d.day.today" [class.text-slate-700]="!d.day.today">
+              {{ d.day.long }} <span class="font-normal text-slate-500">{{ d.day.num }}</span>
+              @if (d.day.today) { <span class="inline-block w-2 h-2 rounded-full bg-brand-500"></span> }
+            </h3>
+            @if (d.shifts.length === 0) {
+              <p class="text-xs text-slate-400 pl-1">No shifts</p>
+            } @else {
+              <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                @for (s of d.shifts; track s.id) {
+                  <button type="button" (click)="openShift(s)" [class]="'text-left rounded-lg px-3 py-2.5 cursor-pointer transition flex flex-col gap-1 ' + shiftLook(s)"
+                          [attr.data-testid]="'shift-' + s.id" [attr.data-mine]="iAmOn(s)" [attr.aria-label]="(s.name || 'Shift') + ' ' + timeRange(s)">
+                    <div class="flex items-center justify-between gap-2 text-sm font-semibold text-slate-900">
+                      <span>{{ s.name ? s.name + ' · ' : '' }}{{ timeRange(s) }}</span>
+                      @if (iAmOn(s)) { <span class="text-[11px] font-bold uppercase tracking-wide text-brand-800">Your shift</span> }
+                    </div>
+                    <div class="text-[11px] text-slate-600">
+                      @if (s.assignments.length === 0) {
+                        <span class="font-medium text-orange-700">Open shift{{ s.headcount > 1 ? ' · needs ' + s.headcount : '' }}</span>{{ s.outside_hours ? ' · outside hours' : '' }}
+                      } @else {
+                        <span>{{ s.name || 'Shift' }}</span>{{ s.outside_hours ? ' · outside hours' : '' }}
+                      }
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                      @for (a of s.assignments; track a.id) {
+                        <span [class]="nameClass(a, s.shift_date)" [attr.data-minor]="a.is_minor" data-testid="shift-name">
+                          {{ a.name }}{{ isMine(a) ? ' (you)' : '' }}
+                          @if (hasTimeOff(a.employee_id, s.shift_date)) {
+                            <span class="ml-1 inline-flex items-center px-1 rounded text-[10px] font-bold bg-rose-600 text-white" title="Scheduled on time off day">Off</span>
+                          }
+                        </span>
+                      }
+                    </div>
+                    @for (a of s.assignments; track a.id) {
+                      @if (isMine(a) && a.note) { <div class="text-[11px] italic text-slate-700" data-testid="my-note">Note: {{ a.note }}</div> }
+                    }
+                    @if (s.open_count > 0) {
+                      <div class="text-[11px] font-semibold text-orange-700 border border-dashed border-orange-400 rounded px-1.5 py-0.5 bg-white/70 self-start">+ {{ s.open_count }} open</div>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </section>
+        }
+        @if (!loading() && visibleShifts().length === 0) {
+          <p class="text-center text-sm text-slate-500" data-testid="no-shifts">{{ emptyText }}</p>
+        }
+      </div>
+    } @else if (view() === 'stats') {
+      <div class="p-5 space-y-8" data-testid="stats-view">
+        <!-- KPI Summary Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3" data-testid="stats-kpis">
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-slate-500">Weekly Shift Demand</div>
+            <div class="text-2xl font-extrabold text-slate-900 mt-1" data-testid="kpi-total-hours">{{ totalWeekDensityHours() }} <span class="text-xs font-semibold text-slate-500">hrs</span></div>
+            <div class="text-[11px] text-slate-500 mt-0.5">Total shift slot demand</div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-emerald-700">Assigned Hours</div>
+            <div class="text-2xl font-extrabold text-emerald-800 mt-1" data-testid="kpi-assigned-hours">{{ totalWeekAssignedHours() }} <span class="text-xs font-semibold text-emerald-600">hrs</span></div>
+            <div class="text-[11px] text-emerald-700 mt-0.5">{{ totalWeekDensityHours() > 0 ? Math.round((totalWeekAssignedHours() / totalWeekDensityHours()) * 100) : 0 }}% filled ({{ scheduledSlots() }} slot{{ scheduledSlots() === 1 ? '' : 's' }})</div>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-amber-700">Open Shift Hours</div>
+            <div class="text-2xl font-extrabold text-amber-800 mt-1" data-testid="kpi-open-hours">{{ totalWeekOpenHours() }} <span class="text-xs font-semibold text-amber-600">hrs</span></div>
+            <div class="text-[11px] text-amber-700 mt-0.5">{{ openSlots() }} slot{{ openSlots() === 1 ? '' : 's' }} waiting for staff</div>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 shadow-xs">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-blue-700">Active Staff</div>
+            <div class="text-2xl font-extrabold text-blue-900 mt-1" data-testid="kpi-active-staff">{{ scheduledEmployeeCount() }} <span class="text-xs font-semibold text-blue-600">/ {{ totalEmployeeCount() }}</span></div>
+            <div class="text-[11px] text-blue-700 mt-0.5">Avg {{ averageEmployeeHours() }} hrs / active</div>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 shadow-xs col-span-2 md:col-span-4 lg:col-span-1">
+            <div class="text-[11px] font-semibold tracking-wider uppercase text-slate-500">Peak Shift Day</div>
+            <div class="text-xl font-extrabold text-slate-900 mt-1 truncate" data-testid="kpi-peak-day">
+              {{ busiestDay() ? busiestDay()?.long : 'None' }}
+            </div>
+            <div class="text-[11px] text-slate-500 mt-0.5">
+              {{ busiestDay() ? (busiestDay()?.totalHours + ' hrs scheduled') : 'No shifts this week' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 1. Daily Shift Hours Density (Weekly Graph) -->
+        <section class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs" data-testid="daily-density-graph">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                </svg>
+                Daily Shift Hours Density (Weekly Graph)
+              </h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Total scheduled shift hours per day across the week (regardless of assigned employee)
+              </p>
+            </div>
+            <!-- Legend -->
+            <div class="flex items-center gap-4 text-xs font-medium">
+              <span class="flex items-center gap-1.5 text-slate-700">
+                <span class="w-3.5 h-3.5 rounded bg-brand-600 inline-block"></span> Assigned hours
+              </span>
+              <span class="flex items-center gap-1.5 text-slate-700">
+                <span class="w-3.5 h-3.5 rounded bg-amber-400 inline-block"></span> Open shift hours
+              </span>
+            </div>
+          </div>
+
+          <!-- Vertical Bar Chart Canvas -->
+          <div class="relative pt-6 pb-2">
+            <!-- Background horizontal reference grid lines -->
+            <div class="absolute inset-0 flex flex-col justify-between pointer-events-none pb-14 pt-6">
+              @for (tick of dailyDensityTicks(); track tick.percent) {
+                <div class="w-full flex items-center text-[10px] text-slate-400">
+                  <span class="w-8 text-right pr-2 font-mono">{{ tick.label }}</span>
+                  <div class="flex-1 border-b border-slate-100 border-dashed"></div>
+                </div>
+              }
+            </div>
+
+            <!-- 7 Columns Grid -->
+            <div class="grid grid-cols-7 gap-2 sm:gap-4 relative z-10 pl-8 h-64 items-end">
+              @for (day of dayDensityStats(); track day.iso) {
+                <div class="flex flex-col items-center h-full justify-end group">
+                  <!-- Floating hours badge above bar -->
+                  <div class="mb-2 text-xs font-bold transition-transform group-hover:scale-110"
+                       [class.text-brand-700]="day.today"
+                       [class.text-slate-700]="!day.today">
+                    {{ day.totalHours > 0 ? day.totalHours + 'h' : '0h' }}
+                  </div>
+
+                  <!-- Bar Track -->
+                  <div class="w-full max-w-[56px] h-44 bg-slate-100/70 rounded-xl relative flex flex-col justify-end overflow-hidden p-1 transition-all group-hover:bg-slate-200/60"
+                       [title]="day.long + ': ' + day.totalHours + ' hrs (' + day.assignedHours + 'h assigned, ' + day.openHours + 'h open)'">
+                    @if (day.totalHours > 0) {
+                      <div class="w-full rounded-lg overflow-hidden flex flex-col justify-end transition-all duration-500 shadow-xs"
+                           [style.height.%]="Math.max(10, (day.totalHours / maxDailyDensityHours()) * 100)">
+                        <!-- Open Hours portion (top of stack) -->
+                        @if (day.openHours > 0) {
+                          <div class="w-full bg-amber-400 transition-all duration-300"
+                               [style.height.%]="(day.openHours / day.totalHours) * 100"
+                               title="{{ day.openHours }} hrs open"></div>
+                        }
+                        <!-- Assigned Hours portion (bottom of stack) -->
+                        @if (day.assignedHours > 0) {
+                          <div class="w-full bg-brand-600 transition-all duration-300"
+                               [style.height.%]="(day.assignedHours / day.totalHours) * 100"
+                               title="{{ day.assignedHours }} hrs assigned"></div>
+                        }
+                      </div>
+                    } @else {
+                      <div class="w-full h-1 bg-slate-300 rounded-full my-auto self-center opacity-60"></div>
+                    }
+                  </div>
+
+                  <!-- X-Axis Label -->
+                  <div class="mt-3 text-center">
+                    <div class="text-[11px] font-bold tracking-wider uppercase"
+                         [class.text-brand-700]="day.today"
+                         [class.text-slate-500]="!day.today">
+                      {{ day.short }}
+                    </div>
+                    <div class="inline-flex items-center justify-center text-xs font-extrabold mt-0.5"
+                         [class]="day.today ? 'w-6 h-6 rounded-full bg-brand-600 text-white shadow-xs' : 'text-slate-900'">
+                      {{ day.num }}
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">
+                      {{ day.shiftCount }} shift{{ day.shiftCount === 1 ? '' : 's' }}
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- Daily Breakdown Cards Strip -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-4 border-t border-slate-100 mt-2">
+            @for (day of dayDensityStats(); track day.iso) {
+              <div class="p-2.5 rounded-xl border text-center transition-colors"
+                   [class]="day.today ? 'bg-brand-50/70 border-brand-200' : 'bg-slate-50/60 border-slate-200/80'">
+                <div class="text-xs font-bold text-slate-800">{{ day.short }} {{ day.num }}</div>
+                <div class="text-sm font-extrabold text-slate-900 mt-0.5">{{ day.totalHours }} <span class="text-[10px] font-normal text-slate-500">hrs</span></div>
+                <div class="text-[11px] text-slate-600 mt-1 space-y-0.5">
+                  <div class="text-emerald-700 font-medium">{{ day.assignedHours }}h assigned</div>
+                  @if (day.openHours > 0) {
+                    <div class="text-amber-700 font-semibold">{{ day.openHours }}h open</div>
+                  } @else if (day.totalHours > 0) {
+                    <div class="text-emerald-600 font-medium text-[10px]">&#10003; 100% staffed</div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </section>
+
+        <!-- 2. Hours Assigned per Employee (Horizontal Histogram / Bar Chart) -->
+        <section class="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs" data-testid="employee-histogram">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <div>
+              <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                </svg>
+                Hours Assigned per Employee
+              </h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Horizontal histogram of scheduled hours per employee for this week (Standard 40h benchmark)
+              </p>
+            </div>
+
+            <!-- Search & Filter Controls -->
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="relative">
+                <input type="text"
+                       [ngModel]="statsSearch()"
+                       (ngModelChange)="statsSearch.set($event)"
+                       name="statsSearch"
+                       placeholder="Filter by name…"
+                       class="h-8 pl-8 pr-3 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 w-40 sm:w-48"
+                       data-testid="stats-search">
+                <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+                </svg>
+                @if (statsSearch()) {
+                  <button type="button" (click)="statsSearch.set('')" class="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold">&times;</button>
+                }
+              </div>
+
+              <div class="inline-flex rounded-lg border border-slate-300 overflow-hidden text-xs" role="group">
+                <button type="button"
+                        (click)="statsFilter.set('all')"
+                        [class]="'h-8 px-2.5 font-semibold cursor-pointer ' + (statsFilter() === 'all' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')"
+                        data-testid="filter-all">
+                  All ({{ totalEmployeeCount() }})
+                </button>
+                <button type="button"
+                        (click)="statsFilter.set('scheduled')"
+                        [class]="'h-8 px-2.5 font-semibold cursor-pointer ' + (statsFilter() === 'scheduled' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')"
+                        data-testid="filter-scheduled">
+                  Scheduled ({{ scheduledEmployeeCount() }})
+                </button>
+                <button type="button"
+                        (click)="statsFilter.set('unassigned')"
+                        [class]="'h-8 px-2.5 font-semibold cursor-pointer ' + (statsFilter() === 'unassigned' ? 'bg-brand-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50')"
+                        data-testid="filter-unassigned">
+                  0 hrs ({{ totalEmployeeCount() - scheduledEmployeeCount() }})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Histogram Container -->
+          <div class="space-y-3">
+            <!-- Scale Ruler Header -->
+            <div class="flex items-center gap-3 pl-44 sm:pl-56 pr-24 sm:pr-28 text-[11px] text-slate-400 border-b border-slate-100 pb-1.5 font-mono select-none">
+              <div class="flex-1 relative h-4">
+                @for (tick of employeeHistogramTicks(); track tick.hour) {
+                  <div class="absolute -translate-x-1/2 flex flex-col items-center" [style.left.%]="tick.percent">
+                    <span>{{ tick.hour }}h</span>
+                  </div>
+                }
+              </div>
+            </div>
+
+            <!-- Employee Histogram Rows -->
+            @for (emp of filteredEmployeeStats(); track emp.id) {
+              <div class="rounded-xl border transition-all"
+                   [class]="emp.isCurrentEmployee ? 'bg-brand-50/40 border-brand-300 shadow-xs' : 'bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xs'"
+                   [attr.data-testid]="'emp-row-' + emp.id">
+                <div class="flex items-center gap-3 p-3">
+                  <!-- Col 1: Employee Info -->
+                  <div class="w-40 sm:w-52 flex-shrink-0 flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold flex-shrink-0"
+                         [class]="emp.isCurrentEmployee ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-700 border border-slate-200'">
+                      {{ getEmpInitials(emp.name) }}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
+                        <span class="truncate" [title]="emp.name">{{ emp.name }}</span>
+                        @if (emp.isCurrentEmployee) {
+                          <span class="px-1.5 py-0.2 rounded-full bg-brand-100 text-brand-800 text-[10px] font-extrabold">You</span>
+                        }
+                      </div>
+                      <div class="flex flex-wrap items-center gap-1 mt-0.5">
+                        @if (emp.isMinor) {
+                          <span class="px-1 rounded bg-yellow-100 text-yellow-800 text-[10px] font-bold border border-yellow-300">Minor</span>
+                        }
+                        @if (emp.hasTimeOffConflict) {
+                          <span class="px-1 rounded bg-rose-100 text-rose-800 text-[10px] font-bold border border-rose-300" title="Assigned on a time-off day">⚠️ Off</span>
+                        }
+                        @if (emp.totalHours > 40) {
+                          <span class="px-1 rounded bg-rose-50 text-rose-700 text-[10px] font-extrabold border border-rose-200">+{{ Math.round((emp.totalHours - 40) * 10) / 10 }}h OT</span>
+                        }
+                        <span class="text-[11px] text-slate-500">{{ emp.shiftCount }} shift{{ emp.shiftCount === 1 ? '' : 's' }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Col 2: Horizontal Bar Track -->
+                  <div class="flex-1 relative h-7 bg-slate-100/90 rounded-lg overflow-hidden flex items-center p-0.5">
+                    <!-- 40h Guideline -->
+                    @if (maxEmployeeHours() >= 40) {
+                      <div class="absolute top-0 bottom-0 border-r-2 border-dashed border-amber-400 z-10 pointer-events-none opacity-80"
+                           [style.left.%]="(40 / maxEmployeeHours()) * 100"
+                           title="40 hours standard full-time"></div>
+                    }
+
+                    <!-- Filled Horizontal Bar -->
+                    @if (emp.totalHours > 0) {
+                      <div class="h-full rounded-md transition-all duration-500 flex items-center relative shadow-xs"
+                           [style.width.%]="Math.min(100, (emp.totalHours / maxEmployeeHours()) * 100)"
+                           [class]="emp.totalHours > 40
+                             ? 'bg-gradient-to-r from-amber-500 to-rose-600'
+                             : emp.totalHours >= 30
+                               ? 'bg-gradient-to-r from-brand-600 to-indigo-600'
+                               : 'bg-gradient-to-r from-sky-500 to-brand-500'">
+                        @if ((emp.totalHours / maxEmployeeHours()) >= 0.14) {
+                          <span class="text-white text-xs font-bold pl-2 truncate select-none">{{ emp.totalHours }}h</span>
+                        }
+                      </div>
+                      @if ((emp.totalHours / maxEmployeeHours()) < 0.14) {
+                        <span class="text-slate-800 text-xs font-extrabold pl-2 select-none">{{ emp.totalHours }}h</span>
+                      }
+                    } @else {
+                      <span class="text-slate-400 text-xs font-normal pl-2 select-none italic">0 hours assigned</span>
+                    }
+                  </div>
+
+                  <!-- Col 3: Hours Summary & Expand Shifts Button -->
+                  <div class="w-24 sm:w-28 flex-shrink-0 flex items-center justify-end gap-2 text-right">
+                    <div>
+                      <div class="text-sm font-extrabold text-slate-900" [attr.data-testid]="'emp-hours-' + emp.id">
+                        {{ emp.totalHours }} <span class="text-[11px] font-normal text-slate-500">hrs</span>
+                      </div>
+                    </div>
+                    @if (emp.shifts.length > 0) {
+                      <button type="button"
+                              (click)="toggleExpandEmp(emp.id)"
+                              class="w-7 h-7 rounded-lg border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer text-xs font-bold transition-transform"
+                              [class.rotate-180]="expandedEmpId() === emp.id"
+                              title="Show assigned shifts">
+                        ▼
+                      </button>
+                    }
+                  </div>
+                </div>
+
+                <!-- Expanded Shift Details for this Employee -->
+                @if (expandedEmpId() === emp.id && emp.shifts.length > 0) {
+                  <div class="px-4 pb-3 pt-1 border-t border-slate-100 bg-slate-50/70 rounded-b-xl space-y-1.5"
+                       [attr.data-testid]="'emp-shifts-' + emp.id">
+                    <div class="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Scheduled Shifts ({{ emp.shifts.length }}):</div>
+                    <div class="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                      @for (s of emp.shifts; track $index) {
+                        <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                          <div>
+                            <span class="font-bold text-slate-800">{{ s.name }}</span>
+                            <div class="text-[11px] text-slate-500">{{ dayName(s.date) }} {{ s.date }}</div>
+                          </div>
+                          <span class="font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded text-[11px]">
+                            {{ timeRange(s) }}
+                          </span>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (filteredEmployeeStats().length === 0) {
+              <div class="py-8 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-200"
+                   data-testid="no-emp-stats">
+                No employees match the selected filter or search.
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+    } @else {
+    <div class="overflow-x-auto p-4">
+      <div class="min-w-[860px]">
+        <!-- day headers -->
+        <div class="grid grid-cols-[56px_repeat(7,1fr)] gap-2 mb-2">
+          <div></div>
+          @for (day of days(); track day.iso) {
+            <div class="rounded-xl py-2 text-center" [class.bg-brand-100]="day.today" [class.bg-slate-100]="!day.today" [attr.data-testid]="'day-' + day.iso">
+              <div class="text-xs font-semibold tracking-wider" [class.text-brand-700]="day.today" [class.text-slate-500]="!day.today">{{ day.short }} <span class="text-base font-extrabold" [class.text-brand-800]="day.today" [class.text-slate-900]="!day.today">{{ day.num }}</span></div>
+              @if (hasShifts(day.iso)) {
+                @if (openOnDay(day.iso) > 0) {
+                  <span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[11px] font-medium" data-testid="day-open">{{ openOnDay(day.iso) }} open shift{{ openOnDay(day.iso) === 1 ? '' : 's' }}</span>
+                } @else {
+                  <span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-white text-brand-700 text-[11px] font-medium">&#10003; Fully staffed</span>
+                }
+              } @else {
+                <span class="inline-block mt-1 text-[11px] text-slate-400">No shifts</span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- grid -->
+        <div class="grid grid-cols-[56px_repeat(7,1fr)] gap-2">
+          <div class="relative" [style.height.px]="gridHeight">
+            @for (label of hourLabels; track $index) {
+              <div class="absolute right-2 text-[11px] font-medium text-slate-500 -translate-y-1/2" [style.top.px]="$index * hourPx">{{ label }}</div>
+            }
+          </div>
+          @for (day of days(); track day.iso) {
+            <div class="relative rounded-lg border border-slate-100" [class.bg-brand-50]="day.today" [class.bg-slate-50]="!day.today" [style.height.px]="gridHeight"
+                 [style.background-image]="'linear-gradient(to bottom, rgba(148,163,184,.25) 1px, transparent 1px)'" [style.background-size]="'100% ' + hourPx + 'px'">
+              @for (p of placed()[day.iso]; track p.shift.id) {
+                <div class="absolute p-0.5" [style.top.px]="p.top" [style.height.px]="p.height" [style.left.%]="p.left" [style.width.%]="p.width">
+                  <button type="button" (click)="openShift(p.shift)" [class]="blockClass(p.shift)"
+                          [attr.data-testid]="'shift-' + p.shift.id" [attr.aria-label]="(p.shift.name || 'Shift') + ' ' + timeRange(p.shift)">
+                    @if (p.shift.assignments.length === 0) {
+                      <div class="flex items-center justify-between text-sm font-semibold text-slate-900 leading-tight">
+                        <span class="truncate" [title]="p.shift.name || 'Open shift'" data-testid="open-shift-name">{{ p.shift.name || 'Open shift' }}</span>
+                        <span class="text-lg font-normal shrink-0 leading-none ml-1">+</span>
+                      </div>
+                      <div class="text-[11px] text-slate-500 leading-tight truncate">
+                        {{ timeRange(p.shift) }}{{ p.shift.headcount > 1 ? ' · needs ' + p.shift.headcount : '' }}{{ p.shift.outside_hours ? ' · outside hours' : '' }}
+                      </div>
+                    } @else {
+                      <div class="text-[11px] text-slate-600 leading-tight">{{ p.shift.name ? p.shift.name + ' · ' : '' }}{{ timeRange(p.shift) }}{{ p.shift.outside_hours ? ' · outside hours' : '' }}</div>
+                      @for (a of p.shift.assignments; track a.id) {
+                        <div>
+                          <span [class]="nameClass(a, p.shift.shift_date)" [attr.data-minor]="a.is_minor" data-testid="shift-name">
+                            {{ a.name }}{{ isMine(a) ? ' (you)' : '' }}
+                            @if (hasTimeOff(a.employee_id, p.shift.shift_date)) {
+                              <span class="ml-1 inline-flex items-center px-1 rounded text-[10px] font-bold bg-rose-600 text-white" title="Scheduled on time off day">Off</span>
+                            }
+                          </span>
+                        </div>
+                        @if (isMine(a) && a.note) { <div class="text-[11px] italic text-slate-600 truncate" data-testid="my-note">Note: {{ a.note }}</div> }
+                      }
+                      @if (p.shift.open_count > 0) {
+                        <div class="mt-auto text-[11px] font-semibold text-orange-700 border border-dashed border-orange-400 rounded px-1.5 py-0.5 bg-white/70">+ {{ p.shift.open_count }} open</div>
+                      }
+                    }
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+        @if (!loading() && visibleShifts().length === 0) {
+          <p class="text-center text-sm text-slate-500 mt-4" data-testid="no-shifts">{{ emptyText }}</p>
+        }
+      </div>
+    </div>
+    }
+  </div>
+
+  }
+
+  <!-- Shift panel -->
+  @if (panel === 'shift' && activeShift; as s) {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <div class="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6" (click)="$event.stopPropagation()" role="dialog" aria-label="Shift details" data-testid="shift-panel">
+        <div class="flex items-start justify-between gap-3 mb-1">
+          <div>
+            <div class="text-xs text-slate-500">{{ dayName(s.shift_date) }} {{ s.shift_date }}</div>
+            <h2 class="text-lg font-bold text-slate-900">{{ s.name || 'Shift' }} · {{ timeRange(s) }}</h2>
+            <div class="text-sm text-slate-500" data-testid="fill-count">{{ s.assignments.length }} of {{ s.headcount }} filled</div>
+          </div>
+          <button type="button" (click)="closePanel()" class="text-2xl leading-none text-slate-400 hover:text-slate-700 cursor-pointer" aria-label="Close">&times;</button>
+        </div>
+
+        @if (panelError) { <div class="my-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+        @if (requestDone) { <div class="my-3 p-2.5 bg-brand-50 border border-brand-200 text-brand-800 rounded-md text-sm" data-testid="request-done">{{ requestDone }}</div> }
+
+        <ul class="my-4 space-y-2" data-testid="shift-people">
+          @for (a of s.assignments; track a.id) {
+            <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2" [class]="hasTimeOff(a.employee_id, s.shift_date) ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'">
+              <span class="text-sm">
+                <span [class]="nameClass(a, s.shift_date)" [attr.data-minor]="a.is_minor" data-testid="panel-name">{{ a.name }}{{ isMine(a) ? ' (you)' : '' }}</span>
+                @if (hasTimeOff(a.employee_id, s.shift_date)) {
+                  <span class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-600 text-white" data-testid="timeoff-conflict-badge">⚠️ Off Today ({{ timeOffLabel(a.employee_id, s.shift_date) }})</span>
+                }
+                @if (a.is_minor) { <span class="ml-1 text-[11px] text-yellow-700">under 18 · limits apply</span> }
+                <span class="text-slate-500">{{ a.is_roster ? ' · no login' : '' }}</span>
+              </span>
+              <span class="flex gap-2 text-xs">
+                @if (canEdit) {
+                  <button type="button" (click)="startNote(a)" class="text-blue-700 hover:underline cursor-pointer" [attr.data-testid]="'note-btn-' + a.id">{{ a.note ? 'Edit note' : 'Add note' }}</button>
+                  <button type="button" (click)="removePerson(a)" class="text-rose-600 hover:underline cursor-pointer" [attr.aria-label]="'Remove ' + a.name">Remove</button>
+                } @else if (!isStaff && !isPast(s) && !a.is_roster) {
+                  @if (isMine(a)) {
+                    <button type="button" (click)="startRequest('give')" class="text-brand-700 hover:underline cursor-pointer" data-testid="give-away">Give away</button>
+                  } @else {
+                    <button type="button" (click)="startRequest('take', a)" class="text-brand-700 hover:underline cursor-pointer" [attr.data-testid]="'take-' + a.id">Take shift</button>
+                    <button type="button" (click)="startRequest('swap', a)" class="text-blue-700 hover:underline cursor-pointer" [attr.data-testid]="'swap-' + a.id">Swap</button>
+                  }
+                }
+              </span>
+              @if (canEdit && noteEditId === a.id) {
+                <div class="w-full space-y-1.5" data-testid="note-editor">
+                  <textarea [(ngModel)]="noteDraft" name="noteDraft" rows="2" maxlength="500" placeholder="What should {{ a.name }} do on this shift?" class="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm bg-white" data-testid="note-input"></textarea>
+                  <div class="flex gap-2">
+                    <button type="button" (click)="saveNote(a)" [disabled]="busy" class="px-3 h-8 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-50" data-testid="note-save">Save note</button>
+                    <button type="button" (click)="noteEditId = null" class="px-3 h-8 rounded-md border border-slate-300 text-xs cursor-pointer">Cancel</button>
+                  </div>
+                </div>
+              } @else if (a.note) {
+                <div class="w-full text-xs text-slate-700 bg-white border border-slate-200 rounded px-2 py-1 whitespace-pre-line" data-testid="person-note"><span class="font-semibold">Note:</span> {{ a.note }}</div>
+              }
+            </li>
+          } @empty {
+            <li class="text-sm text-slate-500">Nobody is assigned yet.</li>
+          }
+        </ul>
+
+        <!-- employee request forms -->
+        @if (requestMode; as mode) {
+          <div class="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-3" data-testid="request-form">
+            @if (mode.kind === 'give') {
+              <div class="text-sm font-semibold text-slate-800">Give up this shift</div>
+              <select [(ngModel)]="giveTo" name="giveTo" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="give-to">
+                <option [ngValue]="'all'">Everyone in my department (first to accept gets it)</option>
+                @for (c of coworkers(); track c.id) { <option [ngValue]="c.id">{{ c.name }}</option> }
+              </select>
+            } @else if (mode.kind === 'take') {
+              <div class="text-sm text-slate-800">Ask <strong>{{ mode.person?.name }}</strong> to give you this shift?</div>
+            } @else {
+              <div class="text-sm font-semibold text-slate-800">Swap with {{ mode.person?.name }}</div>
+              @if (mySwappable.length) {
+                <label class="block text-xs text-slate-600">I'll give up</label>
+                <select [(ngModel)]="swapMine" name="swapMine" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="swap-mine">
+                  @for (m of mySwappable; track m.id) { <option [ngValue]="m.id">{{ m.label }}</option> }
+                </select>
+              } @else {
+                <div class="text-sm text-slate-500">You have no upcoming shifts this week to offer.</div>
+              }
+            }
+            <div class="flex gap-2">
+              <button type="button" (click)="sendRequest()" [disabled]="busy" class="px-3 h-9 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="send-request">Send request</button>
+              <button type="button" (click)="requestMode = null" class="px-3 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+            </div>
+          </div>
+        }
+
+        <!-- staff controls -->
+        @if (canEdit) {
+          @if (s.open_count > 0) {
+            <div class="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span>Add employees to shift ({{ s.open_count }} open spot{{ s.open_count === 1 ? '' : 's' }})</span>
+                <span class="text-slate-500 font-normal">Headcount: {{ s.headcount }}</span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <select [(ngModel)]="toAdd" name="toAdd" class="flex-1 h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="add-person">
+                  <option [ngValue]="null">Add an employee…</option>
+                  @for (p of addable; track p.id) {
+                    <option [ngValue]="p.id">{{ p.name }}{{ hasTimeOff(p.id, s.shift_date) ? ' 🔴 [Off Today - ' + timeOffLabel(p.id, s.shift_date) + ']' : '' }}</option>
+                  }
+                </select>
+                <button type="button" (click)="addPerson()" [disabled]="!toAdd || busy" class="h-9 px-3 rounded-md text-sm bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 cursor-pointer" data-testid="add-person-btn">Add</button>
+                <button type="button" (click)="empDir.openAddModal()" class="h-9 px-3 rounded-md text-sm border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium cursor-pointer" title="Create and add a new employee" data-testid="new-employee-btn">+ New Employee</button>
+              </div>
+
+              @if (addable.length > 1 && s.open_count > 1) {
+                <div class="pt-1">
+                  <div class="text-xs text-slate-600 font-medium mb-1">Or select multiple employees (max {{ s.open_count }}):</div>
+                  <div class="max-h-28 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-white">
+                    @for (p of addable; track p.id) {
+                      <label class="flex items-center justify-between gap-2 text-xs py-1 px-1.5 rounded cursor-pointer" [class.bg-rose-50]="hasTimeOff(p.id, s.shift_date)" [class.hover:bg-slate-50]="!hasTimeOff(p.id, s.shift_date)">
+                        <div class="flex items-center gap-2">
+                          <input type="checkbox"
+                                 [checked]="toAddList.includes(p.id)"
+                                 [disabled]="!toAddList.includes(p.id) && toAddList.length >= s.open_count"
+                                 (change)="toggleToAddList(p.id)"
+                                 class="rounded text-brand-600 cursor-pointer" />
+                          <span [class.text-rose-700]="hasTimeOff(p.id, s.shift_date)" [class.font-semibold]="hasTimeOff(p.id, s.shift_date)">{{ p.name }}</span>
+                        </div>
+                        @if (hasTimeOff(p.id, s.shift_date)) {
+                          <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 border border-rose-300 text-rose-700" data-testid="off-indicator">
+                            <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                            Off Today
+                          </span>
+                        }
+                      </label>
+                    }
+                  </div>
+                  @if (toAddList.length > 0) {
+                    <div class="mt-2 flex justify-end">
+                      <button type="button" (click)="addMultiplePeople()" [disabled]="busy" class="h-8 px-3 rounded-md text-xs bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 cursor-pointer" data-testid="add-multiple-btn">
+                        Add {{ toAddList.length }} selected employee{{ toAddList.length === 1 ? '' : 's' }}
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+
+              <input type="text" [(ngModel)]="newNote" name="newNote" maxlength="500" placeholder="Note for added employee(s) (optional)" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="add-note" />
+            </div>
+          } @else {
+            <p class="text-xs text-slate-500 mb-4" data-testid="shift-full-msg">This shift is full (headcount limit of {{ s.headcount }} reached). Raise the number of people needed to add more.</p>
+          }
+
+          @if (editing) {
+            <div class="mb-4 p-3 rounded-lg border border-slate-200 space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <div class="col-span-2"><label class="block text-xs text-slate-600 mb-0.5">Name</label><input type="text" [(ngModel)]="edit.name" name="editName" maxlength="100" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" /></div>
+                <div><label class="block text-xs text-slate-600 mb-0.5">Start</label><input type="time" [(ngModel)]="edit.start_time" name="editStart" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="edit-start" /></div>
+                <div><label class="block text-xs text-slate-600 mb-0.5">End</label><input type="time" [(ngModel)]="edit.end_time" name="editEnd" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="edit-end" /></div>
+                <div><label class="block text-xs text-slate-600 mb-0.5">People needed</label><input type="number" min="1" max="100" [(ngModel)]="edit.headcount" name="editHeadcount" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="edit-headcount" /></div>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" (click)="saveEdit()" [disabled]="busy" class="px-3 h-9 rounded-md bg-brand-600 text-white text-sm font-semibold cursor-pointer" data-testid="edit-save">Save</button>
+                <button type="button" (click)="editing = false" class="px-3 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+              </div>
+            </div>
+          } @else {
+            <div class="flex justify-between text-sm">
+              <button type="button" (click)="startEdit()" class="text-slate-700 hover:underline cursor-pointer" data-testid="edit-shift">Edit shift / people needed</button>
+              <button type="button" (click)="deleteShift()" class="text-rose-600 hover:underline cursor-pointer" data-testid="delete-shift">Delete shift</button>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Warning before scheduling (approved time off, hour limits, minors) -->
+  @if (outsidePrompt; as o) {
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center" role="alertdialog" aria-label="Outside hours of operation" data-testid="outside-warning">
+        <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 text-xl font-bold">!</div>
+        <p class="text-slate-800 mb-5" data-testid="outside-text">{{ o.text }}</p>
+        <div class="flex justify-center gap-3">
+          <button type="button" (click)="confirmOutside(false)" class="px-5 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="outside-no">No</button>
+          <button type="button" (click)="confirmOutside(true)" class="px-5 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer" data-testid="outside-yes">Yes</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (confirmPrompt; as t) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center" role="alertdialog" [attr.aria-label]="t.kind === 'time_off' ? 'Approved time off' : 'Scheduling warning'" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-warning' : 'limit-warning'">
+        <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 text-xl font-bold">!</div>
+        <p class="text-slate-800 mb-5" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-text' : 'limit-text'">{{ t.text }}</p>
+        <div class="flex justify-center gap-3">
+          <button type="button" (click)="confirmWarning(false)" class="px-5 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-no' : 'limit-no'">No</button>
+          <button type="button" (click)="confirmWarning(true)" class="px-5 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer" [attr.data-testid]="t.kind === 'time_off' ? 'timeoff-yes' : 'limit-yes'">Yes</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Auto-schedule: unanswered time-off requests -->
+  @if (autoPrompt; as p) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+      <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 text-center" role="alertdialog" aria-label="Unanswered request offs" data-testid="auto-pending">
+        <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3 text-xl font-bold">!</div>
+        <p class="text-slate-800 mb-2">There are still request offs that have not been looked at. Would you like to continue?</p>
+        <p class="text-xs text-slate-500 mb-5">{{ p.count }} pending{{ p.people.length ? ' (' + p.people.join(', ') + ')' : '' }}. Pending requests are not blocked off by the auto scheduler; only approved ones are.</p>
+        <div class="flex flex-wrap justify-center gap-3">
+          <a routerLink="/time-off" class="px-4 h-10 inline-flex items-center rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold no-underline text-slate-800" data-testid="auto-review">Review requests</a>
+          <button type="button" (click)="autoPrompt = null" class="px-4 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="auto-cancel">Cancel</button>
+          <button type="button" (click)="runAuto(true)" class="px-5 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer" data-testid="auto-continue">Continue</button>
+        </div>
+      </div>
+    </div>
+  }
+
+
+
+  <!-- Post: step 1, review -->
+  @if (postReview; as r) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4" role="dialog" aria-label="Review schedule" data-testid="post-review">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Review before posting</h2>
+          <p class="text-xs text-slate-500">{{ r.department.name }} · {{ r.week_label }}</p>
+        </div>
+        @if (postError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="post-error">{{ postError }}</div> }
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="rounded-lg bg-slate-50 border border-slate-200 py-2"><div class="text-xl font-extrabold text-slate-900" data-testid="review-shifts">{{ r.shift_count }}</div><div class="text-[11px] text-slate-500">shifts</div></div>
+          <div class="rounded-lg bg-slate-50 border border-slate-200 py-2"><div class="text-xl font-extrabold text-slate-900" data-testid="review-filled">{{ r.filled }} / {{ r.slots }}</div><div class="text-[11px] text-slate-500">spots filled</div></div>
+          <div class="rounded-lg border py-2" [class]="r.open_slots ? 'bg-orange-50 border-orange-300' : 'bg-brand-50 border-brand-300'"><div class="text-xl font-extrabold text-slate-900" data-testid="review-open">{{ r.open_slots }}</div><div class="text-[11px] text-slate-500">still open</div></div>
+        </div>
+        @if (r.warnings.length) {
+          <div class="rounded-lg border border-amber-300 bg-amber-50 p-3" data-testid="review-warnings">
+            <div class="text-sm font-semibold text-amber-900 mb-1">Check these first</div>
+            <ul class="list-disc pl-5 text-xs text-amber-900 space-y-0.5">@for (w of r.warnings; track $index) { <li>{{ w }}</li> }</ul>
+          </div>
+        }
+        @if (r.open_shifts.length) {
+          <div class="rounded-lg border border-orange-300 bg-orange-50 p-3" data-testid="review-open-list">
+            <div class="text-sm font-semibold text-orange-900 mb-1">Shifts with open spots</div>
+            <ul class="list-disc pl-5 text-xs text-orange-900 space-y-0.5">@for (o of r.open_shifts; track $index) { <li>{{ o }}</li> }</ul>
+          </div>
+        }
+        @if (r.people.length) {
+          <div>
+            <div class="text-sm font-semibold text-slate-800 mb-1">{{ r.people.length }} {{ r.people.length === 1 ? 'person is' : 'people are' }} scheduled</div>
+            <ul class="text-xs text-slate-700 divide-y divide-slate-100 border border-slate-200 rounded-lg">
+              @for (pp of r.people; track pp.name) { <li class="flex justify-between px-3 py-1.5"><span>{{ pp.name }}</span><span>{{ pp.shifts }} shift{{ pp.shifts === 1 ? '' : 's' }} · {{ pp.hours }} h</span></li> }
+            </ul>
+          </div>
+        }
+        @if (r.shift_count === 0) { <p class="text-sm text-rose-700" data-testid="review-empty">There are no shifts in this week, so there is nothing to post.</p> }
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" (click)="cancelPost()" class="px-4 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="post-back">Back to editing</button>
+          <button type="button" (click)="postConfirm = true" [disabled]="r.shift_count === 0" class="px-4 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="post-continue">Continue</button>
+        </div>
+      </div>
+    </div>
+    <!-- Post: step 2, are you sure -->
+    @if (postConfirm) {
+      <div class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
+        <div class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4" role="alertdialog" aria-label="Confirm posting" data-testid="post-confirm">
+          <h2 class="text-lg font-bold text-slate-900">Post this schedule?</h2>
+          <p class="text-sm text-slate-700">Everyone in {{ r.department.name }} will be able to see the schedule for {{ r.week_label }}, and the {{ r.people.length }} {{ r.people.length === 1 ? 'person' : 'people' }} on it will be notified.
+            @if (r.open_slots) { <strong> {{ r.open_slots }} spot{{ r.open_slots === 1 ? ' is' : 's are' }} still open.</strong> }
+            @if (r.warnings.length) { <strong> {{ r.warnings.length }} warning{{ r.warnings.length === 1 ? ' was' : 's were' }} shown.</strong> }
+            Later changes will show right away. Are you sure?</p>
+          <div class="flex justify-end gap-2">
+            <button type="button" (click)="postConfirm = false" class="px-4 h-10 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm font-semibold cursor-pointer" data-testid="post-no">No, go back</button>
+            <button type="button" (click)="confirmPost()" [disabled]="postBusy" class="px-4 h-10 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="post-yes">Yes, post it</button>
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- Add shift -->
+  @if (panel === 'add') {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <form class="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-3" (click)="$event.stopPropagation()" (ngSubmit)="createShift()" data-testid="add-panel">
+        <h2 class="text-lg font-bold text-slate-900">Add a schedule</h2>
+        <p class="text-xs text-slate-500">{{ deptName }} · hours of operation {{ coverageText }}</p>
+        @if (panelError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+
+        <div>
+          <label class="block text-xs text-slate-600 mb-0.5">Task (headcount determined from task)</label>
+          <select [(ngModel)]="newShiftTaskId" (ngModelChange)="onNewShiftTaskChange($event)" name="nsTask" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="ns-task">
+            <option [ngValue]="null">Select a task (or enter custom name below)…</option>
+            @for (t of tasks(); track t.id) {
+              <option [ngValue]="t.id">{{ t.name }} (Required headcount: {{ t.required_people }})</option>
+            }
+          </select>
+        </div>
+
+        @if (!newShiftTaskId) {
+          <div>
+            <label class="block text-xs text-slate-600 mb-0.5">Department</label>
+            <select [(ngModel)]="newShiftDeptId" name="nsDept" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="ns-department">
+              <option [ngValue]="null" disabled>Select department…</option>
+              @for (d of departments; track d.id) {
+                <option [ngValue]="d.id">{{ d.name }}</option>
+              }
+            </select>
+          </div>
+        }
+
+        <div>
+          <label class="block text-xs text-slate-600 mb-0.5">Schedule name</label>
+          <input type="text" [(ngModel)]="newShift.name" name="nsName" maxlength="100" placeholder="e.g. Morning Shift" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-name" />
+        </div>
+
+        <div><label class="block text-xs text-slate-600 mb-0.5">Day</label>
+          <select [(ngModel)]="newShift.shift_date" name="nsDate" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="ns-date">
+            @for (d of days(); track d.iso) { <option [value]="d.iso">{{ d.long }} {{ d.num }}</option> }
+          </select></div>
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="block text-xs text-slate-600 mb-0.5">Start</label><input type="time" [(ngModel)]="newShift.start_time" name="nsStart" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-start" /></div>
+          <div><label class="block text-xs text-slate-600 mb-0.5">End</label><input type="time" [(ngModel)]="newShift.end_time" name="nsEnd" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-end" /></div>
+          <div>
+            <label class="block text-xs text-slate-600 mb-0.5">People needed</label>
+            <input type="number" min="1" max="100" [(ngModel)]="newShift.headcount" name="nsHeadcount" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="ns-headcount" />
+          </div>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-xs text-slate-600 font-medium">Assign employees (Max: {{ newShift.headcount }})</label>
+            <span class="text-xs text-slate-500">{{ newShiftEmployees.length }} of {{ newShift.headcount }} selected</span>
+          </div>
+          @if (addableEmployeesForNewShift.length === 0) {
+            <p class="text-xs text-slate-400">No employees available</p>
+          } @else {
+            <div class="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50" data-testid="ns-employee-list">
+              @for (emp of addableEmployeesForNewShift; track emp.id) {
+                <label class="flex items-center justify-between text-xs py-1 px-1.5 rounded cursor-pointer" [class.bg-rose-50]="hasTimeOff(emp.id, newShift.shift_date)" [class.hover:bg-white]="!hasTimeOff(emp.id, newShift.shift_date)">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox"
+                           [checked]="isEmployeeSelectedForNewShift(emp.id)"
+                           [disabled]="!isEmployeeSelectedForNewShift(emp.id) && newShiftEmployees.length >= newShift.headcount"
+                           (change)="toggleEmployeeForNewShift(emp.id)"
+                           class="rounded text-brand-600 cursor-pointer"
+                           [attr.data-testid]="'ns-emp-' + emp.id" />
+                    <span class="font-medium text-slate-800" [class.text-rose-700]="hasTimeOff(emp.id, newShift.shift_date)">{{ emp.name }}</span>
+                    <span class="text-slate-400 text-[11px]">{{ emp.position || emp.role }}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    @if (hasTimeOff(emp.id, newShift.shift_date)) {
+                      <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 border border-rose-300 text-rose-700" data-testid="new-shift-off-badge">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                        Off Today
+                      </span>
+                    }
+                    @if (isEmployeeSelectedForNewShift(emp.id)) {
+                      <span class="text-[11px] font-semibold text-brand-700">Selected</span>
+                    }
+                  </div>
+                </label>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" (click)="closePanel()" class="px-4 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+          <button type="submit" [disabled]="busy" class="px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="ns-save">Add schedule</button>
+        </div>
+      </form>
+    </div>
+  }
+
+  <!-- Templates -->
+  @if (panel === 'templates') {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <div class="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-4" (click)="$event.stopPropagation()" data-testid="templates-panel">
+        <div class="flex items-start justify-between"><div><h2 class="text-lg font-bold text-slate-900">Shift templates</h2>
+          <p class="text-xs text-slate-500">Save a shift and how many people it needs, then apply it to days of this week for {{ deptName }}.</p></div>
+          <button type="button" (click)="closePanel()" class="text-2xl leading-none text-slate-400 hover:text-slate-700 cursor-pointer" aria-label="Close">&times;</button></div>
+        @if (panelError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+        @if (templateMessage) { <div class="p-2.5 bg-brand-50 border border-brand-200 text-brand-800 rounded-md text-sm" data-testid="template-message">{{ templateMessage }}</div> }
+
+        <div class="rounded-lg border border-slate-200 p-3 space-y-2">
+          <div class="text-sm font-semibold text-slate-800">New template</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div class="col-span-2 sm:col-span-1"><label class="block text-xs text-slate-600 mb-0.5">Name</label><input type="text" [(ngModel)]="newTemplate.name" name="ntName" maxlength="100" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-name" /></div>
+            <div><label class="block text-xs text-slate-600 mb-0.5">Start</label><input type="time" [(ngModel)]="newTemplate.start_time" name="ntStart" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-start" /></div>
+            <div><label class="block text-xs text-slate-600 mb-0.5">End</label><input type="time" [(ngModel)]="newTemplate.end_time" name="ntEnd" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-end" /></div>
+            <div><label class="block text-xs text-slate-600 mb-0.5">People</label><input type="number" min="1" max="100" [(ngModel)]="newTemplate.headcount" name="ntCount" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="nt-count" /></div>
+          </div>
+          <button type="button" (click)="saveTemplate()" [disabled]="busy" class="px-3 h-9 rounded-md bg-brand-600 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="nt-save">Save template</button>
+        </div>
+
+        <ul class="space-y-1.5" data-testid="template-list">
+          @for (t of templates(); track t.id) {
+            <li class="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-sm" data-testid="template-row">
+              <span><strong>{{ t.name }}</strong> · {{ timeRange(t) }} · needs {{ t.headcount }}</span>
+              <button type="button" (click)="removeTemplate(t)" class="text-xs text-rose-600 hover:underline cursor-pointer">Delete</button>
+            </li>
+          } @empty { <li class="text-sm text-slate-500">No templates yet.</li> }
+        </ul>
+
+        @if (templates().length) {
+          <div class="rounded-lg border border-slate-200 p-3 space-y-2">
+            <div class="text-sm font-semibold text-slate-800">Apply to {{ rangeLabel }}</div>
+            <select [(ngModel)]="applyTemplateId" name="applyTemplate" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm bg-white" data-testid="apply-template">
+              @for (t of templates(); track t.id) { <option [ngValue]="t.id">{{ t.name }} ({{ timeRange(t) }}, {{ t.headcount }})</option> }
+            </select>
+            <div class="flex flex-wrap gap-3">
+              @for (d of days(); track d.iso; let i = $index) {
+                <label class="flex items-center gap-1 text-sm"><input type="checkbox" [(ngModel)]="applyDays[i]" [name]="'applyDay' + i" [attr.data-day]="d.short" /> {{ d.short }}</label>
+              }
+            </div>
+            <button type="button" (click)="applyTemplate()" [disabled]="busy" class="px-3 h-9 rounded-md border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="apply-btn">Apply to selected days</button>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Hours of operation (General Manager) -->
+  @if (panel === 'hours') {
+    <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" (click)="closePanel()">
+      <form class="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-6 space-y-3" (click)="$event.stopPropagation()" (ngSubmit)="saveHours()" data-testid="hours-panel">
+        <h2 class="text-lg font-bold text-slate-900">Hours of operation</h2>
+        <p class="text-xs text-slate-500">The same opening and closing time applies every day. Shifts must fall inside these hours.</p>
+        @if (panelError) { <div class="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-md text-sm" data-testid="panel-error">{{ panelError }}</div> }
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-xs text-slate-600 mb-0.5">Opens</label><input type="time" [(ngModel)]="hoursForm.open_time" name="hOpen" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="h-open" /></div>
+          <div><label class="block text-xs text-slate-600 mb-0.5">Closes</label><input type="time" [(ngModel)]="hoursForm.close_time" name="hClose" class="w-full h-9 border border-slate-300 rounded-md px-2 text-sm" data-testid="h-close" /></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" (click)="closePanel()" class="px-4 h-9 rounded-md border border-slate-300 text-sm cursor-pointer">Cancel</button>
+          <button type="submit" [disabled]="busy" class="px-4 h-9 rounded-md bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold cursor-pointer disabled:opacity-50" data-testid="h-save">Save</button>
+        </div>
+      </form>
+    </div>
+  }
+
+  <app-employee-directory #empDir [currentShift]="activeShift" [modalOnly]="true" (employeeAdded)="onEmployeeAdded($event)"></app-employee-directory>
+</div>

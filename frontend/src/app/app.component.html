@@ -9,113 +9,123 @@
           <div class="relative">
             <button (click)="toggleMenu()"
                     type="button"
-                    class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer flex items-center justify-center"
+                    class="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer flex items-center justify-center"
                     aria-label="Toggle navigation menu">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 6h16M4 12h16M4 18h16"></path>
               </svg>
             </button>
-
             @if (isMenuOpen) {
               <!-- Backdrop to close on click outside -->
               <div class="fixed inset-0 z-40" (click)="closeMenu()"></div>
-
               <div class="absolute left-0 mt-2 w-48 rounded-xl bg-white border border-slate-200 shadow-lg py-1.5 z-50">
-                <a routerLink="/" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
-                  Log In
-                </a>
-                <a href="#" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
-                  About Us
-                </a>
-                <a href="#" (click)="closeMenu()" class="block px-4 py-2 text-sm text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-medium no-underline">
-                  Contact
-                </a>
+                @if (isAuthenticated) {
+                  <!-- Navigation links now live inside the hamburger menu -->
+                  <nav class="flex flex-col space-y-2">
+                    <a routerLink="/home"
+                       routerLinkActive="text-brand-600 bg-slate-50 font-semibold"
+                       
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
+                      Dashboard
+                    </a>
+                    @if (isManagerOrCeo) {
+                      <a routerLink="/employees"
+                         routerLinkActive="text-brand-600 bg-slate-50 font-semibold"
+                         class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
+                        Employees
+                      </a>
+                    }
+                    <a routerLink="/schedules"
+                       routerLinkActive="text-brand-600 bg-slate-50 font-semibold"
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
+                      Schedules
+                    </a>
+                    <a routerLink="/time-off"
+                       routerLinkActive="text-brand-600 bg-slate-50 font-semibold"
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
+                      Time Off
+                    </a>
+                  </nav>
+                } @else {
+                  <!-- Not logged in – just show a Sign‑In link -->
+                  <a routerLink="/home"
+                     (click)="closeMenu()"
+                     class="block px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 font-medium no-underline">
+                    Sign In
+                  </a>
+                }
               </div>
             }
           </div>
-
-          @if (isAuthenticated) {
-            <nav class="hidden md:flex space-x-4">
-              <a routerLink="/dashboard"
-                 routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 [routerLinkActiveOptions]="{ exact: true }"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                Dashboard
-              </a>
-
-              @if (isManagerOrCeo) {
-                <a routerLink="/employees"
-                   routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                  Employees
-                </a>
-                <a routerLink="/compatibility"
-                   routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                   class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                  Compatibility
-                </a>
-              }
-
-              <a routerLink="/schedules"
-                 routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                Schedules
-              </a>
-              <a routerLink="/time-off"
-                 routerLinkActive="text-emerald-600 bg-slate-50 font-semibold"
-                 class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 transition no-underline">
-                Time Off
-              </a>
-            </nav>
-          }
+          <!-- No top‑bar navigation links any more – they’re all inside the hamburger menu -->
         </div>
-
-        <!-- Center: ShiftWise Logo (Takes you to landing page) -->
+        <!-- Center: ShiftWise Logo (still centered) -->
         <div class="absolute left-1/2 transform -translate-x-1/2">
-          <a routerLink="/" class="flex items-center space-x-2 text-xl font-bold text-slate-800 tracking-tight no-underline">
-            <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-600 text-white font-black text-lg">S</span>
-            <span>Shift<span class="text-emerald-600">Wise</span></span>
+          <a [routerLink]="isAuthenticated ? '/home' : '/'"
+             class="flex items-center space-x-1.5 text-xl font-bold text-slate-800 tracking-tight no-underline">
+            <img src="/icon_logo.png" alt="ShiftWise Logo" class="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
+            <span>Shift<span class="text-brand-600">Wise</span></span>
           </a>
         </div>
-
         <!-- Right: User Controls / Auth Status -->
         <div class="flex items-center space-x-4">
-          @if (isAuthenticated && currentUser) {
+          @if (currentUser) {
             <div class="flex items-center space-x-3">
               <div class="text-right hidden sm:block">
-                <div class="text-sm font-semibold text-slate-800">{{ currentUser.username }}</div>
-                <div class="text-xs">
-                  @if (currentUser.role === 'CEO') {
-                    <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">CEO</span>
-                  } @else if (currentUser.role === 'MANAGER') {
-                    <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Manager</span>
-                  } @else {
-                    <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Employee</span>
-                  }
-                </div>
+              <div class="text-xs">
+                @if (currentUser.role === 'ceo') {
+                  <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">CEO</span>
+                } @else if (currentUser.role === 'employee') {
+                  <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-brand-100 text-brand-800">Employee</span>
+                }
               </div>
-              <button (click)="onLogout()" type="button" class="px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-md text-xs font-medium transition cursor-pointer">
-                Sign Out
-              </button>
             </div>
+              <!-- Profile icon + dropdown -->
+      <div class="relative">
+        <button (click)="toggleProfileMenu()"
+                type="button"
+                [attr.aria-expanded]="isProfileMenuOpen"
+                aria-label="Profile menu"
+                class="rounded-full p-0.5 ring-2 ring-transparent hover:ring-brand-500 focus:outline-none focus:ring-brand-500 cursor-pointer">
+          <img src="/user.png" alt="" class="w-9 h-9 rounded-full object-cover" />
+        </button>
+
+        @if (isProfileMenuOpen) {
+          <!-- Backdrop to close on click outside -->
+          <div class="fixed inset-0 z-40" (click)="closeProfileMenu()"></div>
+
+          <div class="absolute right-0 mt-2 w-48 rounded-xl bg-white border border-slate-200 shadow-lg py-1.5 z-50">
+            <button (click)="goToAccount()"
+                    class="w-full text-left block px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 font-medium cursor-pointer">
+              Account
+            </button>
+            <button (click)="logout()"
+                    class="w-full text-left block px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 font-medium cursor-pointer">
+              Sign out
+            </button>
+          </div>
+        }
+      </div>
+    </div>
           } @else {
-            <a routerLink="/register" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition shadow-sm no-underline">
-              Sign Up
+            <a routerLink="/home" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-md text-sm font-medium transition shadow-sm no-underline">
+              Sign In
             </a>
           }
         </div>
       </div>
     </div>
   </header>
-
   <!-- Global Notifications -->
   @if (notifications.length > 0) {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 w-full">
       @for (message of notifications; track message.id) {
-        <div class="p-4 mb-3 rounded-lg border text-sm font-medium flex items-center justify-between"
-             [class.bg-emerald-50]="message.type === 'success'"
-             [class.border-emerald-200]="message.type === 'success'"
-             [class.text-emerald-800]="message.type === 'success'"
+        <div class="p-4 mb-3 rounded-lg border text-sm font-medium flex items-center justify-between
+                    bg-brand-50 border-brand-200 text-brand-800"
+             [class.bg-brand-50]="message.type === 'success'"
+             [class.border-brand-200]="message.type === 'success'"
+             [class.text-brand-800]="message.type === 'success'"
              [class.bg-rose-50]="message.type === 'error'"
              [class.border-rose-200]="message.type === 'error'"
              [class.text-rose-800]="message.type === 'error'"
@@ -126,19 +136,18 @@
              [class.border-blue-200]="message.type === 'info'"
              [class.text-blue-800]="message.type === 'info'">
           <span>{{ message.text }}</span>
-          <button (click)="dismissNotification(message.id)" class="text-slate-400 hover:text-slate-600 text-lg font-bold ml-4 leading-none cursor-pointer">&times;</button>
+          <button (click)="dismissNotification(message.id)"
+                  class="text-slate-400 hover:text-slate-600 text-lg font-bold ml-4 leading-none cursor-pointer">&times;</button>
         </div>
       }
     </div>
   }
-
-  <!-- Main Content Area: Replaces {% block content %} -->
+  <!-- Main Content Area -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <router-outlet />
   </main>
-
   <!-- Footer -->
   <footer class="bg-white border-t border-slate-200 py-4 mt-auto text-center text-xs text-slate-500">
-    <p>ShiftWise &bull; Intelligent Workforce Scheduling Platform</p>
+    <p>ShiftWise • Intelligent Workforce Scheduling Platform</p>
   </footer>
 </div>

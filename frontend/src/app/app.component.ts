@@ -1,9 +1,11 @@
-import { Component } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from './core/auth.service';
+import { Role } from './core/models';
 
 export interface UserProfile {
   username: string;
-  role: 'CEO' | 'MANAGER' | 'EMPLOYEE';
+  role?: Role;
 }
 
 export interface NotificationMessage {
@@ -20,15 +22,39 @@ export interface NotificationMessage {
   styleUrl: './app.component.scss'
 })
 export class AppComponent {
+  private auth = inject(AuthService);
+  private router = inject(Router);
   title = 'ShiftWise';
 
-  // Current user state (can be wired to an AuthService)
-  currentUser: UserProfile | null = null;
-  isAuthenticated = false;
+  get isAuthenticated(): boolean {
+    return this.auth.isAuthenticated;
+  }
+
+  get currentUser(): UserProfile | null {
+    const me = this.auth.me();
+    if (me) {
+      return {
+        username: me.first_name ? `${me.first_name} ${me.last_name || ''}`.trim() : (me.username || this.auth.user()?.username || ''),
+        role: me.profile?.role
+      };
+    }
+    const user = this.auth.user();
+    if (user) {
+      return { username: user.username };
+    }
+    return null;
+  }
+
+  get isManagerOrCeo(): boolean {
+    const role = this.auth.role;
+    return role === 'ceo' || role === 'manager';
+  }
 
   notifications: NotificationMessage[] = [];
-
   isMenuOpen = false;
+  isProfileMenuOpen = false;
+  
+
 
   toggleMenu(): void {
     this.isMenuOpen = !this.isMenuOpen;
@@ -38,16 +64,26 @@ export class AppComponent {
     this.isMenuOpen = false;
   }
 
-  get isManagerOrCeo(): boolean {
-    return this.currentUser?.role === 'CEO' || this.currentUser?.role === 'MANAGER';
+  toggleProfileMenu(): void {
+    this.isProfileMenuOpen = !this.isProfileMenuOpen;
   }
 
+  closeProfileMenu(): void {
+    this.isProfileMenuOpen = false;
+  }
+
+  goToAccount(): void {
+    this.closeProfileMenu();
+    this.router.navigate(['/account']);
+  }
+
+  
   dismissNotification(id: string): void {
     this.notifications = this.notifications.filter(n => n.id !== id);
   }
 
-  onLogout(): void {
-    this.currentUser = null;
-    this.isAuthenticated = false;
+  logout(): void {
+    this.auth.logout();
   }
+
 }

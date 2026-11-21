@@ -39,12 +39,22 @@ services:
         ports:
             - "4200:4200"
         volumes:
-            - ./frontend:/app
+            - ./frontend:/app:Z
             - /app/node_modules
         networks:
             - frontend_net
         depends_on:
             - backend
+
+    mockoon:
+        image: docker.io/mockoon/cli:latest
+        command: ["--data", "/data/mockoon-environment.json", "--port", "3000"]
+        ports:
+            - "3000:3000"
+        volumes:
+            - ./mockoon-environment.json:/data/mockoon-environment.json:ro,z
+        networks:
+            - frontend_net
 
 volumes:
     postgres_data:

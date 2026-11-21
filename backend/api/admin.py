@@ -11,6 +11,9 @@ from .models import (
     Schedule,
     TimeOffRequest,
     User,
+    Skill,
+    Task,
+    SchedulePublication
 )
 
 
@@ -65,6 +68,8 @@ class EmployeeProfileForm(forms.ModelForm):
         if company_id:
             try:
                 self.fields['department'].queryset = Department.objects.filter(company_id=int(company_id))
+                if 'skills' in self.fields:
+                    self.fields['skills'].queryset = Skill.objects.filter(company_id=int(company_id))
             except (ValueError, TypeError):
                 pass
 
@@ -110,6 +115,7 @@ class EmployeeProfileAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'company', 'department', 'role', 'position')
     list_filter = ('company', 'department', 'role')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'position')
+    filter_horizontal = ('skills',)
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
@@ -120,6 +126,45 @@ class EmployeeProfileAdmin(admin.ModelAdmin):
         js = ('api/js/filter_departments.js',)
 
 
+class TaskForm(forms.ModelForm):
+    class Meta:
+        model = Task
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        company_id = None
+        if self.instance and self.instance.pk and self.instance.company_id:
+            company_id = self.instance.company_id
+        elif self.data:
+            prefix = f"{self.prefix}-" if self.prefix else ""
+            company_id = self.data.get(f"{prefix}company")
+        if company_id:
+            try:
+                if 'skills' in self.fields:
+                    self.fields['skills'].queryset = Skill.objects.filter(company_id=int(company_id))
+                if 'department' in self.fields:
+                    self.fields['department'].queryset = Department.objects.filter(company_id=int(company_id))
+            except (ValueError, TypeError):
+                pass
+
+
+@admin.register(Task)
+class TaskAdmin(admin.ModelAdmin):
+    form = TaskForm
+    list_display = ('id', 'name', 'company', 'department', 'priority', 'preferred_window', 'required_people', 'duration_hours')
+    list_filter = ('company', 'department', 'priority')
+    search_fields = ('name', 'description')
+    filter_horizontal = ('skills',)
+
+
+@admin.register(Skill)
+class SkillAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'company', 'description')
+    list_filter = ('company',)
+    search_fields = ('name', 'description')
+
+
 admin.site.register(Company)
 admin.site.register(Department)
 admin.site.register(Schedule)
@@ -127,3 +172,11 @@ admin.site.register(CompatibilityScore)
 admin.site.register(AvailabilitySlot)
 admin.site.register(TimeOffRequest)
 admin.site.register(Project)
+
+
+@admin.register(SchedulePublication)
+class SchedulePublicationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'company', 'department', 'week_start', 'published', 'published_by', 'published_at')
+    list_filter = ('published', 'company', 'department')
+    ordering = ('-week_start',)
+
