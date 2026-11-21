@@ -21,6 +21,10 @@ function loadView(): 'grid' | 'list' | 'stats' {
   } catch { return 'grid'; }
 }
 
+function loadCollapsed(): boolean {
+  try { return localStorage.getItem('shiftwise.scheduleCollapsed') === 'true'; } catch { return false; }
+}
+
 export function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
@@ -100,6 +104,8 @@ export class WeeklyScheduleComponent implements OnDestroy {
 
   /** Grid (hour-by-hour columns), List (one card per shift), or Stats (hours histograms & density charts). */
   view = signal<'grid' | 'list' | 'stats'>(loadView());
+  /** Grid view only: hide the hourly grid and show just each day's scheduled / open counts. */
+  collapsed = signal<boolean>(loadCollapsed());
   /** Is this department-week posted? Null until loaded. Drafts are only visible to managers. */
   pub = signal<Publication | null>(null);
   /** Step 1 of posting: the review of the week. Step 2 (postConfirm): the final "are you sure". */
@@ -450,6 +456,10 @@ export class WeeklyScheduleComponent implements OnDestroy {
   openOnDay(iso: string): number {
     return this.visibleShifts().filter(s => s.shift_date === iso).reduce((n, s) => n + Math.max(0, (s.headcount ?? 1) - (s.assignments?.length ?? 0)), 0);
   }
+  /** People assigned to shifts on this day. */
+  scheduledOnDay(iso: string): number {
+    return this.visibleShifts().filter(s => s.shift_date === iso).reduce((n, s) => n + (s.assignments?.length ?? 0), 0);
+  }
   hasShifts(iso: string): boolean { return this.visibleShifts().some(s => s.shift_date === iso); }
 
   dayName(iso: string): string { return DAY_LONG[(new Date(iso + 'T00:00:00').getDay() + 6) % 7]; }
@@ -706,6 +716,12 @@ export class WeeklyScheduleComponent implements OnDestroy {
   changeDepartment(): void { this.closePanel(); this.reload(); if (this.canEdit) { this.loadStaffData(); } }
 
   runs(id: number): boolean { return this.managedIds.has(id); }
+
+  toggleCollapsed(): void {
+    const next = !this.collapsed();
+    this.collapsed.set(next);
+    try { localStorage.setItem('shiftwise.scheduleCollapsed', String(next)); } catch { /* storage may be blocked */ }
+  }
 
   setView(v: 'grid' | 'list' | 'stats'): void {
     this.view.set(v);
