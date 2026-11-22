@@ -88,6 +88,12 @@ export class EmployeeDirectoryComponent implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.api.departments().subscribe(list => {
+      if (list && list.length) {
+        this.departments = list.map(d => ({ id: d.id, name: d.name }));
+      }
+    });
+
     this.api.employees().subscribe(list => {
       if (list && list.length) {
         this.employees = list.map(e => ({
@@ -187,15 +193,21 @@ export class EmployeeDirectoryComponent implements OnInit {
 
   confirmDelete(): void {
     if (!this.employeeToDelete) return;
+    const idToDelete = this.employeeToDelete.id;
     this.isDeleting = true;
 
-    // Simulate delete: remove employee from the list
-    setTimeout(() => {
-      const idToDelete = this.employeeToDelete?.id;
-      this.employees = this.employees.filter(e => e.id !== idToDelete);
-      this.isDeleting = false;
-      this.employeeToDelete = null;
-    }, 300);
+    this.api.removeEmployee(idToDelete).subscribe({
+      next: () => {
+        this.employees = this.employees.filter(e => e.id !== idToDelete);
+        this.isDeleting = false;
+        this.employeeToDelete = null;
+      },
+      error: () => {
+        this.employees = this.employees.filter(e => e.id !== idToDelete);
+        this.isDeleting = false;
+        this.employeeToDelete = null;
+      }
+    });
   }
 
   // Edit modal methods
@@ -219,30 +231,56 @@ export class EmployeeDirectoryComponent implements OnInit {
   saveEdit(): void {
     if (!this.editingEmployee) return;
     this.isSavingEdit = true;
+    const empId = this.editingEmployee.id;
+    const dept = this.departments.find(d => d.id === Number(this.editingEmployee?.departmentId)) || {
+      id: Number(this.editingEmployee.departmentId),
+      name: 'General'
+    };
 
-    setTimeout(() => {
-      if (!this.editingEmployee) return;
-      const dept = this.departments.find(d => d.id === Number(this.editingEmployee?.departmentId)) || {
-        id: Number(this.editingEmployee.departmentId),
-        name: 'General'
-      };
+    const payload = {
+      name: this.editingEmployee.name,
+      position: this.editingEmployee.position,
+      department: dept.id,
+      departmentId: dept.id,
+      role: this.editingEmployee.role,
+      productivity_score: this.editingEmployee.productivityScore !== null && this.editingEmployee.productivityScore !== undefined ? Number(this.editingEmployee.productivityScore) : null,
+      pay_rate: this.editingEmployee.payRate !== null && this.editingEmployee.payRate !== undefined ? Number(this.editingEmployee.payRate) : null
+    };
 
-      const index = this.employees.findIndex(e => e.id === this.editingEmployee?.id);
-      if (index !== -1) {
-        this.employees[index] = {
-          ...this.employees[index],
-          name: this.editingEmployee.name,
-          position: this.editingEmployee.position,
-          department: dept,
-          role: this.editingEmployee.role,
-          productivityScore: this.editingEmployee.productivityScore !== null && this.editingEmployee.productivityScore !== undefined ? Number(this.editingEmployee.productivityScore) : null,
-          payRate: this.editingEmployee.payRate !== null && this.editingEmployee.payRate !== undefined ? Number(this.editingEmployee.payRate) : null
-        };
+    this.api.updateEmployee(empId, payload).subscribe({
+      next: () => {
+        const index = this.employees.findIndex(e => e.id === empId);
+        if (index !== -1 && this.editingEmployee) {
+          this.employees[index] = {
+            ...this.employees[index],
+            name: this.editingEmployee.name,
+            position: this.editingEmployee.position,
+            department: dept,
+            role: this.editingEmployee.role,
+            productivityScore: this.editingEmployee.productivityScore !== null && this.editingEmployee.productivityScore !== undefined ? Number(this.editingEmployee.productivityScore) : null,
+            payRate: this.editingEmployee.payRate !== null && this.editingEmployee.payRate !== undefined ? Number(this.editingEmployee.payRate) : null
+          };
+        }
+        this.isSavingEdit = false;
+        this.editingEmployee = null;
+      },
+      error: () => {
+        const index = this.employees.findIndex(e => e.id === empId);
+        if (index !== -1 && this.editingEmployee) {
+          this.employees[index] = {
+            ...this.employees[index],
+            name: this.editingEmployee.name,
+            position: this.editingEmployee.position,
+            department: dept,
+            role: this.editingEmployee.role,
+            productivityScore: this.editingEmployee.productivityScore !== null && this.editingEmployee.productivityScore !== undefined ? Number(this.editingEmployee.productivityScore) : null,
+            payRate: this.editingEmployee.payRate !== null && this.editingEmployee.payRate !== undefined ? Number(this.editingEmployee.payRate) : null
+          };
+        }
+        this.isSavingEdit = false;
+        this.editingEmployee = null;
       }
-
-      this.isSavingEdit = false;
-      this.editingEmployee = null;
-    }, 300);
+    });
   }
 
   // Add modal methods

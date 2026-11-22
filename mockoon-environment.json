@@ -22,7 +22,10 @@
           "statusCode": 200,
           "label": "Login Success",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -41,7 +44,10 @@
           "statusCode": 200,
           "label": "Me Profile",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -60,7 +66,10 @@
           "statusCode": 200,
           "label": "Token Refreshed",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -79,7 +88,10 @@
           "statusCode": 200,
           "label": "Logged Out",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -98,7 +110,10 @@
           "statusCode": 200,
           "label": "Departments List",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -117,7 +132,10 @@
           "statusCode": 200,
           "label": "Employees List",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -136,7 +154,10 @@
           "statusCode": 200,
           "label": "Shifts List",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -155,7 +176,10 @@
           "statusCode": 200,
           "label": "Publication",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -174,7 +198,10 @@
           "statusCode": 200,
           "label": "Notifications List",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -193,7 +220,10 @@
           "statusCode": 200,
           "label": "Projects List",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -212,7 +242,10 @@
           "statusCode": 200,
           "label": "Time Off List",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -231,7 +264,10 @@
           "statusCode": 200,
           "label": "Join Codes List",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -250,7 +286,10 @@
           "statusCode": 200,
           "label": "Compatibility Groups",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -269,7 +308,10 @@
           "statusCode": 201,
           "label": "Shift Created",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -288,7 +330,10 @@
           "statusCode": 201,
           "label": "Time Off Created",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -307,7 +352,10 @@
           "statusCode": 201,
           "label": "Join Code Created",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -326,7 +374,10 @@
           "statusCode": 200,
           "label": "Templates",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -345,7 +396,10 @@
           "statusCode": 200,
           "label": "Shift Assigned",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -364,7 +418,10 @@
           "statusCode": 200,
           "label": "Shift Unassigned",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -383,7 +440,10 @@
           "statusCode": 201,
           "label": "Employee Created",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -402,7 +462,10 @@
           "statusCode": 204,
           "label": "Shift Deleted",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
@@ -421,40 +484,404 @@
           "statusCode": 200,
           "label": "Auto Schedule Result",
           "headers": [
-            { "key": "Content-Type", "value": "application/json" }
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-update-employee",
+      "type": "http",
+      "documentation": "Update Employee",
+      "method": "patch",
+      "endpoint": "employees/:id/",
+      "responses": [
+        {
+          "uuid": "resp-update-employee",
+          "body": "{\n  \"id\": 1,\n  \"name\": \"Updated Employee\",\n  \"role\": \"employee\",\n  \"position\": \"Staff\",\n  \"department\": {\n    \"id\": 1,\n    \"name\": \"Operations\"\n  }\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Employee Updated",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-delete-employee",
+      "type": "http",
+      "documentation": "Delete Employee",
+      "method": "delete",
+      "endpoint": "employees/:id/",
+      "responses": [
+        {
+          "uuid": "resp-delete-employee",
+          "body": "",
+          "latency": 0,
+          "statusCode": 204,
+          "label": "Employee Deleted",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-compatibility-list",
+      "type": "http",
+      "documentation": "Pairwise Compatibility List",
+      "method": "get",
+      "endpoint": "compatibility/",
+      "responses": [
+        {
+          "uuid": "resp-compatibility-list",
+          "body": "[\n  {\n    \"id\": 1,\n    \"employee_a\": 1,\n    \"employee_a_name\": \"Carol Williams\",\n    \"employee_b\": 2,\n    \"employee_b_name\": \"Alice Johnson\",\n    \"score\": \"8.50\"\n  }\n]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Compatibility List",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-compatibility-create",
+      "type": "http",
+      "documentation": "Create Pairwise Compatibility",
+      "method": "post",
+      "endpoint": "compatibility/",
+      "responses": [
+        {
+          "uuid": "resp-compatibility-create",
+          "body": "{\n  \"id\": 2,\n  \"employee_a\": 2,\n  \"employee_a_name\": \"Alice Johnson\",\n  \"employee_b\": 3,\n  \"employee_b_name\": \"Bob Smith\",\n  \"score\": \"7.50\"\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Compatibility Created",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-compatibility-delete",
+      "type": "http",
+      "documentation": "Delete Pairwise Compatibility",
+      "method": "delete",
+      "endpoint": "compatibility/:id/",
+      "responses": [
+        {
+          "uuid": "resp-compatibility-delete",
+          "body": "",
+          "latency": 0,
+          "statusCode": 204,
+          "label": "Compatibility Deleted",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-create-company",
+      "type": "http",
+      "documentation": "Create Company",
+      "method": "post",
+      "endpoint": "companies/",
+      "responses": [
+        {
+          "uuid": "resp-create-company",
+          "body": "{\n  \"id\": 1,\n  \"email\": \"manager1@shiftwise.com\",\n  \"username\": \"manager1\",\n  \"first_name\": \"Carol\",\n  \"last_name\": \"Williams\",\n  \"profile\": {\n    \"id\": 10,\n    \"role\": \"ceo\",\n    \"company\": {\n      \"id\": 10,\n      \"name\": \"New Company\",\n      \"open_time\": \"08:00:00\",\n      \"close_time\": \"18:00:00\"\n    },\n    \"department\": {\n      \"id\": 1,\n      \"name\": \"Operations\"\n    },\n    \"extra_departments\": [],\n    \"managed_departments\": [\n      {\n        \"id\": 1,\n        \"name\": \"Operations\"\n      }\n    ],\n    \"can_edit_schedule\": true\n  },\n  \"unread_notifications\": 0\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Company Created",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-create-project",
+      "type": "http",
+      "documentation": "Create Project",
+      "method": "post",
+      "endpoint": "projects/",
+      "responses": [
+        {
+          "uuid": "resp-create-project",
+          "body": "{\n  \"id\": 1,\n  \"company\": 1,\n  \"department\": 1,\n  \"name\": \"New Project\",\n  \"description\": \"\",\n  \"priority\": \"medium\",\n  \"is_active\": true\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Project Created",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-update-project",
+      "type": "http",
+      "documentation": "Update Project",
+      "method": "patch",
+      "endpoint": "projects/:id/",
+      "responses": [
+        {
+          "uuid": "resp-update-project",
+          "body": "{\n  \"id\": 1,\n  \"company\": 1,\n  \"department\": 1,\n  \"name\": \"Updated Project\",\n  \"description\": \"\",\n  \"priority\": \"medium\",\n  \"is_active\": true\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Project Updated",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-delete-project",
+      "type": "http",
+      "documentation": "Delete Project",
+      "method": "delete",
+      "endpoint": "projects/:id/",
+      "responses": [
+        {
+          "uuid": "resp-delete-project",
+          "body": "",
+          "latency": 0,
+          "statusCode": 204,
+          "label": "Project Deleted",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-me-leave",
+      "type": "http",
+      "documentation": "Leave Company",
+      "method": "post",
+      "endpoint": "me/leave/",
+      "responses": [
+        {
+          "uuid": "resp-me-leave",
+          "body": "{\n  \"id\": 1,\n  \"email\": \"manager1@shiftwise.com\",\n  \"username\": \"manager1\",\n  \"first_name\": \"Carol\",\n  \"last_name\": \"Williams\",\n  \"profile\": null,\n  \"unread_notifications\": 0\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Left Company",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-me-join",
+      "type": "http",
+      "documentation": "Join Company",
+      "method": "post",
+      "endpoint": "me/join/",
+      "responses": [
+        {
+          "uuid": "resp-me-join",
+          "body": "{\n  \"id\": 1,\n  \"email\": \"manager1@shiftwise.com\",\n  \"username\": \"manager1\",\n  \"first_name\": \"Carol\",\n  \"last_name\": \"Williams\",\n  \"profile\": {\n    \"id\": 1,\n    \"role\": \"employee\",\n    \"company\": {\n      \"id\": 1,\n      \"name\": \"ShiftWise Demo Inc.\",\n      \"open_time\": \"08:00:00\",\n      \"close_time\": \"18:00:00\"\n    },\n    \"department\": {\n      \"id\": 1,\n      \"name\": \"Operations\"\n    },\n    \"extra_departments\": [],\n    \"managed_departments\": [],\n    \"can_edit_schedule\": false\n  },\n  \"unread_notifications\": 0\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Joined Company",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
           ]
         }
       ]
     }
   ],
   "rootChildren": [
-    { "type": "route", "uuid": "route-login" },
-    { "type": "route", "uuid": "route-me" },
-    { "type": "route", "uuid": "route-refresh" },
-    { "type": "route", "uuid": "route-logout" },
-    { "type": "route", "uuid": "route-departments" },
-    { "type": "route", "uuid": "route-employees" },
-    { "type": "route", "uuid": "route-shifts" },
-    { "type": "route", "uuid": "route-shifts-pub" },
-    { "type": "route", "uuid": "route-notifications" },
-    { "type": "route", "uuid": "route-projects" },
-    { "type": "route", "uuid": "route-timeoff" },
-    { "type": "route", "uuid": "route-codes" },
-    { "type": "route", "uuid": "route-compat" },
-    { "type": "route", "uuid": "route-create-shift" },
-    { "type": "route", "uuid": "route-create-timeoff" },
-    { "type": "route", "uuid": "route-create-code" },
-    { "type": "route", "uuid": "route-shift-templates" },
-    { "type": "route", "uuid": "route-assign-shift" },
-    { "type": "route", "uuid": "route-unassign-shift" },
-    { "type": "route", "uuid": "route-create-employee" },
-    { "type": "route", "uuid": "route-delete-shift" },
-    { "type": "route", "uuid": "route-auto-schedule" }
+    {
+      "type": "route",
+      "uuid": "route-login"
+    },
+    {
+      "type": "route",
+      "uuid": "route-me"
+    },
+    {
+      "type": "route",
+      "uuid": "route-refresh"
+    },
+    {
+      "type": "route",
+      "uuid": "route-logout"
+    },
+    {
+      "type": "route",
+      "uuid": "route-departments"
+    },
+    {
+      "type": "route",
+      "uuid": "route-employees"
+    },
+    {
+      "type": "route",
+      "uuid": "route-shifts"
+    },
+    {
+      "type": "route",
+      "uuid": "route-shifts-pub"
+    },
+    {
+      "type": "route",
+      "uuid": "route-notifications"
+    },
+    {
+      "type": "route",
+      "uuid": "route-projects"
+    },
+    {
+      "type": "route",
+      "uuid": "route-timeoff"
+    },
+    {
+      "type": "route",
+      "uuid": "route-codes"
+    },
+    {
+      "type": "route",
+      "uuid": "route-compat"
+    },
+    {
+      "type": "route",
+      "uuid": "route-create-shift"
+    },
+    {
+      "type": "route",
+      "uuid": "route-create-timeoff"
+    },
+    {
+      "type": "route",
+      "uuid": "route-create-code"
+    },
+    {
+      "type": "route",
+      "uuid": "route-shift-templates"
+    },
+    {
+      "type": "route",
+      "uuid": "route-assign-shift"
+    },
+    {
+      "type": "route",
+      "uuid": "route-unassign-shift"
+    },
+    {
+      "type": "route",
+      "uuid": "route-create-employee"
+    },
+    {
+      "type": "route",
+      "uuid": "route-delete-shift"
+    },
+    {
+      "type": "route",
+      "uuid": "route-auto-schedule"
+    },
+    {
+      "type": "route",
+      "uuid": "route-update-employee"
+    },
+    {
+      "type": "route",
+      "uuid": "route-delete-employee"
+    },
+    {
+      "type": "route",
+      "uuid": "route-compatibility-list"
+    },
+    {
+      "type": "route",
+      "uuid": "route-compatibility-create"
+    },
+    {
+      "type": "route",
+      "uuid": "route-compatibility-delete"
+    },
+    {
+      "type": "route",
+      "uuid": "route-create-company"
+    },
+    {
+      "type": "route",
+      "uuid": "route-create-project"
+    },
+    {
+      "type": "route",
+      "uuid": "route-update-project"
+    },
+    {
+      "type": "route",
+      "uuid": "route-delete-project"
+    },
+    {
+      "type": "route",
+      "uuid": "route-me-leave"
+    },
+    {
+      "type": "route",
+      "uuid": "route-me-join"
+    }
   ],
   "cors": true,
   "headers": [
-    { "key": "Access-Control-Allow-Origin", "value": "*" },
-    { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS" },
-    { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Origin, Accept, Authorization, Content-Length, X-Requested-With" }
+    {
+      "key": "Access-Control-Allow-Origin",
+      "value": "*"
+    },
+    {
+      "key": "Access-Control-Allow-Methods",
+      "value": "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS"
+    },
+    {
+      "key": "Access-Control-Allow-Headers",
+      "value": "Content-Type, Origin, Accept, Authorization, Content-Length, X-Requested-With"
+    }
   ]
 }

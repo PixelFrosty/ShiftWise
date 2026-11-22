@@ -73,7 +73,7 @@ const STATUS_LABEL: Record<MilestoneStatus, string> = { todo: 'To do', in_progre
                 <div class="text-xs text-slate-500">{{ p.department_name || 'Whole company' }} · {{ p.priority }} priority{{ p.is_active ? '' : ' · inactive' }}</div>
               </button>
               <div class="w-40">
-                <div class="text-xs text-slate-500 mb-1" data-testid="project-progress">{{ p.milestone_counts.done }} of {{ p.milestone_counts.total }} done</div>
+                <div class="text-xs text-slate-500 mb-1" data-testid="project-progress">{{ p.milestone_counts.done || 0 }} of {{ p.milestone_counts.total || 0 }} done</div>
                 <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-brand-500" [style.width.%]="pct(p)"></div></div>
               </div>
               @if (p.can_edit) {
@@ -85,7 +85,7 @@ const STATUS_LABEL: Record<MilestoneStatus, string> = { todo: 'To do', in_progre
               <div class="border-t border-slate-100 p-4">
                 @if (p.description) { <p class="text-sm text-slate-600 mb-3 whitespace-pre-line">{{ p.description }}</p> }
                 <div class="space-y-2">
-                  @for (m of p.milestones; track m.id) {
+                  @for (m of (p.milestones || []); track m.id) {
                     <div class="rounded-lg border p-3" [class]="m.assigned_to_me ? 'border-brand-300 bg-brand-50' : 'border-slate-200'" [attr.data-mine]="m.assigned_to_me" data-testid="milestone">
                       <div class="flex flex-wrap items-center gap-2">
                         <span class="font-semibold text-sm text-slate-800" data-testid="milestone-title">{{ m.title }}</span>
@@ -106,7 +106,7 @@ const STATUS_LABEL: Record<MilestoneStatus, string> = { todo: 'To do', in_progre
                       </div>
                       @if (m.description) { <p class="text-xs text-slate-600 mt-1 whitespace-pre-line">{{ m.description }}</p> }
                       @if (p.can_edit) {
-                        <div class="text-xs text-slate-500 mt-1" data-testid="assignees">Assigned: {{ m.assignees.length ? names(m) : 'nobody yet' }}</div>
+                        <div class="text-xs text-slate-500 mt-1" data-testid="assignees">Assigned: {{ (m.assignees && m.assignees.length) ? names(m) : 'nobody yet' }}</div>
                       }
                     </div>
                   } @empty {
@@ -173,7 +173,7 @@ export class ProjectsComponent {
     const managed = new Set((this.auth.me()?.profile?.managed_departments ?? []).map(d => d.id));
     return this.departments().filter(d => this.isCeo() || managed.has(d.id));
   });
-  mine = computed(() => this.projects().flatMap(p => p.milestones.filter(m => m.assigned_to_me).map(m => ({ p, m }))));
+  mine = computed(() => this.projects().flatMap(p => (p.milestones || []).filter(m => m.assigned_to_me).map(m => ({ p, m }))));
 
   // project form
   formOpen = signal(false);
@@ -201,7 +201,7 @@ export class ProjectsComponent {
 
   label(s: MilestoneStatus): string { return STATUS_LABEL[s]; }
   names(m: Milestone): string { return m.assignees.map(a => a.name).join(', '); }
-  pct(p: Project): number { return p.milestone_counts.total ? Math.round(100 * p.milestone_counts.done / p.milestone_counts.total) : 0; }
+  pct(p: Project): number { return p.milestone_counts?.total ? Math.round(100 * (p.milestone_counts.done || 0) / p.milestone_counts.total) : 0; }
   chip(s: MilestoneStatus): string {
     return 'px-2 py-0.5 rounded-full text-xs font-semibold ' + (s === 'done' ? 'bg-brand-100 text-brand-800' : s === 'in_progress' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700');
   }

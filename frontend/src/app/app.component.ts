@@ -77,6 +77,11 @@ export class AppComponent {
     this.router.navigate(['/account']);
   }
 
+  goToCompanies(): void {
+    this.closeProfileMenu();
+    this.router.navigate(['/companies']);
+  }
+
   
   dismissNotification(id: string): void {
     this.notifications = this.notifications.filter(n => n.id !== id);

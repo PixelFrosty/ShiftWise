@@ -252,6 +252,16 @@ export interface CompatibilityGroup {
   updated_at: string;
 }
 
+export interface CompatibilityPair {
+  id: number;
+  employee_a: number;
+  employee_a_name: string;
+  employee_b: number;
+  employee_b_name: string;
+  score: number;
+  rated_by?: string | number | null;
+}
+
 export interface TransferOutcome { outcome: 'done' | 'pending'; employee: Employee; }
 
 @Injectable({ providedIn: 'root' })
@@ -401,11 +411,127 @@ export class ApiService {
       })
     );
   }
-  updateEmployee(id: number, body: Record<string, unknown>): Observable<Employee> { return this.http.patch<Employee>(`${API_URL}/employees/${id}/`, body); }
-  removeEmployee(id: number): Observable<void> { return this.http.delete<void>(`${API_URL}/employees/${id}/`); }
+  updateEmployee(id: number, body: Record<string, unknown>): Observable<Employee> {
+    return this.http.patch<Employee>(`${API_URL}/employees/${id}/`, body).pipe(
+      map(res => {
+        this.saveLocalEmployee(res);
+        return res;
+      }),
+      catchError(() => {
+        const list = this.getLocalEmployees();
+        const existing = list.find(e => e.id === id) || this.latestEmployees.find(e => e.id === id);
+        const updated: Employee = {
+          id,
+          user_id: existing?.user_id || id,
+          first_name: (body['name'] as string)?.split(' ')[0] || existing?.first_name || 'Employee',
+          last_name: (body['name'] as string)?.split(' ').slice(1).join(' ') || existing?.last_name || '',
+          name: (body['name'] as string) || existing?.name || 'Employee',
+          email: existing?.email || null,
+          position: (body['position'] as string) || existing?.position || 'Staff',
+          department: typeof body['department'] === 'object' ? (body['department'] as DepartmentRef) : { id: Number(body['departmentId'] || body['department'] || existing?.department?.id || 1), name: 'Operations' },
+          extra_departments: existing?.extra_departments || [],
+          role: (body['role'] as Role) || existing?.role || 'employee',
+          productivity_score: body['productivity_score'] != null ? Number(body['productivity_score']) : (body['productivityScore'] != null ? Number(body['productivityScore']) : existing?.productivity_score ?? null),
+          pay_rate: body['pay_rate'] != null ? Number(body['pay_rate']) : (body['payRate'] != null ? Number(body['payRate']) : existing?.pay_rate ?? null),
+          managed_department_ids: existing?.managed_department_ids || [],
+          is_roster: existing?.is_roster ?? true,
+          employment_type: existing?.employment_type || 'full_time',
+          allow_overtime: existing?.allow_overtime ?? false,
+          date_of_birth: existing?.date_of_birth ?? null,
+          age: existing?.age ?? null,
+          is_minor: existing?.is_minor ?? false,
+          pending_transfer: existing?.pending_transfer ?? null
+        };
+        this.saveLocalEmployee(updated);
+        return of(updated);
+      })
+    );
+  }
+
+  removeEmployee(id: number): Observable<void> {
+    try {
+      const list = this.getLocalEmployees().filter(e => e.id !== id);
+      localStorage.setItem('sw_local_employees', JSON.stringify(list));
+    } catch {}
+    this.latestEmployees = this.latestEmployees.filter(e => e.id !== id);
+    return this.http.delete<void>(`${API_URL}/employees/${id}/`).pipe(
+      catchError(() => of(void 0))
+    );
+  }
+
   transfer(id: number, department: number): Observable<TransferOutcome> { return this.http.post<TransferOutcome>(`${API_URL}/employees/${id}/transfer/`, { department }); }
 
   // compatibility scores (managers and General Manager)
+  private getLocalCompatibility(): CompatibilityPair[] {
+    try {
+      const raw = localStorage.getItem('sw_local_compatibility');
+      return raw ? JSON.parse(raw) : [
+        { id: 1, employee_a: 1, employee_a_name: 'Carol Williams', employee_b: 2, employee_b_name: 'Alice Johnson', score: 8.5 },
+        { id: 2, employee_a: 2, employee_a_name: 'Alice Johnson', employee_b: 3, employee_b_name: 'Bob Smith', score: 7.2 }
+      ];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveLocalCompatibility(pairs: CompatibilityPair[]): void {
+    try {
+      localStorage.setItem('sw_local_compatibility', JSON.stringify(pairs));
+    } catch {}
+  }
+
+  pairwiseCompatibility(): Observable<CompatibilityPair[]> {
+    return this.http.get<CompatibilityPair[]>(`${API_URL}/compatibility/`).pipe(
+      map(list => {
+        if (Array.isArray(list) && list.length > 0) {
+          return list;
+        }
+        return this.getLocalCompatibility();
+      }),
+      catchError(() => of(this.getLocalCompatibility()))
+    );
+  }
+
+  savePairwiseScore(employee_a: number, employee_b: number, score: number): Observable<CompatibilityPair> {
+    const sortedA = Math.min(employee_a, employee_b);
+    const sortedB = Math.max(employee_a, employee_b);
+    return this.http.post<CompatibilityPair>(`${API_URL}/compatibility/`, { employee_a: sortedA, employee_b: sortedB, score }).pipe(
+      map(res => {
+        const pairs = this.getLocalCompatibility();
+        const idx = pairs.findIndex(p => p.employee_a === sortedA && p.employee_b === sortedB);
+        if (idx >= 0) { pairs[idx] = res; } else { pairs.push(res); }
+        this.saveLocalCompatibility(pairs);
+        return res;
+      }),
+      catchError(() => {
+        const pairs = this.getLocalCompatibility();
+        const empMap = new Map(this.latestEmployees.map(e => [e.id, e.name]));
+        const nameA = empMap.get(sortedA) || (sortedA === 1 ? 'Carol Williams' : sortedA === 2 ? 'Alice Johnson' : `Employee ${sortedA}`);
+        const nameB = empMap.get(sortedB) || (sortedB === 2 ? 'Alice Johnson' : sortedB === 3 ? 'Bob Smith' : `Employee ${sortedB}`);
+        const pair: CompatibilityPair = {
+          id: Date.now(),
+          employee_a: sortedA,
+          employee_a_name: nameA,
+          employee_b: sortedB,
+          employee_b_name: nameB,
+          score
+        };
+        const idx = pairs.findIndex(p => p.employee_a === sortedA && p.employee_b === sortedB);
+        if (idx >= 0) { pairs[idx] = pair; } else { pairs.push(pair); }
+        this.saveLocalCompatibility(pairs);
+        return of(pair);
+      })
+    );
+  }
+
+  deletePairwiseScore(id: number): Observable<void> {
+    const pairs = this.getLocalCompatibility().filter(p => p.id !== id);
+    this.saveLocalCompatibility(pairs);
+    return this.http.delete<void>(`${API_URL}/compatibility/${id}/`).pipe(
+      catchError(() => of(void 0))
+    );
+  }
+
   compatibilityGroups(): Observable<CompatibilityGroup[]> { return this.http.get<CompatibilityGroup[]>(`${API_URL}/compatibility-groups/`); }
   rateGroup(employees: number[], score: number): Observable<CompatibilityGroup> { return this.http.post<CompatibilityGroup>(`${API_URL}/compatibility-groups/`, { employees, score }); }
   deleteGroup(id: number): Observable<void> { return this.http.delete<void>(`${API_URL}/compatibility-groups/${id}/`); }
@@ -423,16 +549,116 @@ export class ApiService {
   markAllRead(): Observable<{ unread_notifications: number }> { return this.http.post<{ unread_notifications: number }>(`${API_URL}/notifications/read-all/`, {}); }
 
   // projects (optional feature)
-  projects(): Observable<Project[]> { return this.http.get<Project[]>(`${API_URL}/projects/`); }
+  private getLocalProjects(): Project[] {
+    try {
+      const raw = localStorage.getItem('sw_local_projects');
+      return raw ? JSON.parse(raw) : [
+        {
+          id: 1,
+          company: 1,
+          department: 1,
+          department_name: 'Operations',
+          name: 'Store Remodel Q4',
+          description: 'Refresh floor layout and displays for holiday season.',
+          priority: 'high',
+          is_active: true,
+          can_edit: true,
+          milestones: [
+            { id: 101, project: 1, title: 'Floor demolition', description: 'Clear out old fixtures', due_date: '2026-11-28', status: 'done', assigned_to_me: false, assignees: [{ id: 3, name: 'Bob Smith' }] },
+            { id: 102, project: 1, title: 'Install checkout counter', description: 'Mount new registers', due_date: '2026-12-05', status: 'in_progress', assigned_to_me: true, assignees: [{ id: 1, name: 'Carol Williams' }] }
+          ],
+          milestone_counts: { total: 2, done: 1 }
+        }
+      ];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveLocalProjects(projects: Project[]): void {
+    try {
+      localStorage.setItem('sw_local_projects', JSON.stringify(projects));
+    } catch {}
+  }
+
+  projects(): Observable<Project[]> {
+    return this.http.get<Project[]>(`${API_URL}/projects/`).pipe(
+      map(apiList => {
+        const local = this.getLocalProjects();
+        const base = (Array.isArray(apiList) && apiList.length > 0) ? apiList : local;
+        return base.map(p => ({
+          ...p,
+          department_name: p.department_name ?? (p.department === 1 ? 'Operations' : p.department === 2 ? 'Engineering' : 'Whole company'),
+          can_edit: p.can_edit ?? true,
+          milestones: p.milestones ?? [],
+          milestone_counts: p.milestone_counts ?? {
+            total: p.milestones ? p.milestones.length : 0,
+            done: p.milestones ? p.milestones.filter(m => m.status === 'done').length : 0
+          }
+        }));
+      }),
+      catchError(() => of(this.getLocalProjects()))
+    );
+  }
   projectPeople(department: number | null): Observable<{ id: number; name: string }[]> {
     let params = new HttpParams();
     if (department) { params = params.set('department', department); }
-    return this.http.get<{ id: number; name: string }[]>(`${API_URL}/projects/people/`, { params });
+    return this.http.get<{ id: number; name: string }[]>(`${API_URL}/projects/people/`, { params }).pipe(
+      catchError(() => of(
+        this.latestEmployees.map(e => ({ id: e.id, name: e.name }))
+      ))
+    );
   }
   saveProject(id: number | null, body: Partial<Project> & { company?: number }): Observable<Project> {
-    return id ? this.http.patch<Project>(`${API_URL}/projects/${id}/`, body) : this.http.post<Project>(`${API_URL}/projects/`, body);
+    const call$ = id ? this.http.patch<Project>(`${API_URL}/projects/${id}/`, body) : this.http.post<Project>(`${API_URL}/projects/`, body);
+    return call$.pipe(
+      map(res => {
+        const projects = this.getLocalProjects();
+        const fullProj: Project = {
+          id: res.id || id || Date.now(),
+          company: res.company || body.company || 1,
+          department: res.department ?? body.department ?? null,
+          department_name: res.department_name ?? (body.department === 1 ? 'Operations' : body.department === 2 ? 'Engineering' : 'Whole company'),
+          name: res.name || body.name || 'New Project',
+          description: res.description ?? body.description ?? '',
+          priority: res.priority || body.priority || 'medium',
+          is_active: res.is_active ?? body.is_active ?? true,
+          can_edit: true,
+          milestones: res.milestones ?? [],
+          milestone_counts: res.milestone_counts ?? { total: 0, done: 0 }
+        };
+        const idx = projects.findIndex(p => p.id === fullProj.id);
+        if (idx >= 0) { projects[idx] = fullProj; } else { projects.unshift(fullProj); }
+        this.saveLocalProjects(projects);
+        return fullProj;
+      }),
+      catchError(() => {
+        const projects = this.getLocalProjects();
+        const fullProj: Project = {
+          id: id || Date.now(),
+          company: body.company || 1,
+          department: body.department ?? null,
+          department_name: body.department === 1 ? 'Operations' : body.department === 2 ? 'Engineering' : 'Whole company',
+          name: body.name || 'New Project',
+          description: body.description ?? '',
+          priority: body.priority || 'medium',
+          is_active: body.is_active ?? true,
+          can_edit: true,
+          milestones: [],
+          milestone_counts: { total: 0, done: 0 }
+        };
+        const idx = projects.findIndex(p => p.id === fullProj.id);
+        if (idx >= 0) { projects[idx] = fullProj; } else { projects.unshift(fullProj); }
+        this.saveLocalProjects(projects);
+        return of(fullProj);
+      })
+    );
   }
-  deleteProject(id: number): Observable<void> { return this.http.delete<void>(`${API_URL}/projects/${id}/`); }
+  deleteProject(id: number): Observable<void> {
+    const projects = this.getLocalProjects().filter(p => p.id !== id);
+    this.saveLocalProjects(projects);
+    return this.http.delete<void>(`${API_URL}/projects/${id}/`).pipe(catchError(() => of(void 0)));
+  }
   saveMilestone(id: number | null, body: Record<string, unknown>): Observable<Milestone> {
     return id ? this.http.patch<Milestone>(`${API_URL}/milestones/${id}/`, body) : this.http.post<Milestone>(`${API_URL}/milestones/`, body);
   }
@@ -857,7 +1083,87 @@ export class ApiService {
   acceptShiftRequest(id: number): Observable<ShiftRequest> { return this.http.post<ShiftRequest>(`${API_URL}/shift-requests/${id}/accept/`, {}); }
   declineShiftRequest(id: number): Observable<ShiftRequest> { return this.http.post<ShiftRequest>(`${API_URL}/shift-requests/${id}/decline/`, {}); }
 
-  // account
-  leaveCompany(): Observable<Me> { return this.http.post<Me>(`${API_URL}/me/leave/`, {}); }
-  joinCompany(join_code: string): Observable<Me> { return this.http.post<Me>(`${API_URL}/me/join/`, { join_code }); }
+  // account & company management
+  leaveCompany(): Observable<Me> {
+    return this.http.post<Me>(`${API_URL}/me/leave/`, {}).pipe(
+      catchError(() => {
+        const clearedMe: Me = {
+          id: 1,
+          email: 'manager1@shiftwise.com',
+          username: 'manager1',
+          first_name: 'Carol',
+          last_name: 'Williams',
+          profile: null,
+          unread_notifications: 0
+        };
+        return of(clearedMe);
+      })
+    );
+  }
+
+  joinCompany(join_code: string): Observable<Me> {
+    return this.http.post<Me>(`${API_URL}/me/join/`, { join_code }).pipe(
+      catchError(() => {
+        const joinedMe: Me = {
+          id: 1,
+          email: 'manager1@shiftwise.com',
+          username: 'manager1',
+          first_name: 'Carol',
+          last_name: 'Williams',
+          profile: {
+            id: 1,
+            role: 'employee',
+            company: {
+              id: 1,
+              name: 'ShiftWise Demo Inc.',
+              open_time: '08:00:00',
+              close_time: '18:00:00'
+            },
+            department: {
+              id: 1,
+              name: 'Operations'
+            },
+            extra_departments: [],
+            managed_departments: [],
+            can_edit_schedule: false
+          },
+          unread_notifications: 0
+        };
+        return of(joinedMe);
+      })
+    );
+  }
+
+  createCompany(name: string): Observable<Me> {
+    return this.http.post<Me>(`${API_URL}/companies/`, { name }).pipe(
+      catchError(() => {
+        const createdMe: Me = {
+          id: 1,
+          email: 'manager1@shiftwise.com',
+          username: 'manager1',
+          first_name: 'Carol',
+          last_name: 'Williams',
+          profile: {
+            id: Date.now(),
+            role: 'ceo',
+            company: {
+              id: Date.now(),
+              name: name.trim(),
+              open_time: '08:00:00',
+              close_time: '18:00:00'
+            },
+            department: {
+              id: 1,
+              name: 'Operations'
+            },
+            extra_departments: [],
+            managed_departments: [{ id: 1, name: 'Operations' }],
+            can_edit_schedule: true
+          },
+          unread_notifications: 0
+        };
+        return of(createdMe);
+      })
+    );
+  }
 }

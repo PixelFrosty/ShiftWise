@@ -41,10 +41,20 @@
                        class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
                       Schedules
                     </a>
+                    <a routerLink="/projects"
+                       routerLinkActive="text-brand-600 bg-slate-50 font-semibold"
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
+                      Projects
+                    </a>
                     <a routerLink="/time-off"
                        routerLinkActive="text-brand-600 bg-slate-50 font-semibold"
                        class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
                       Time Off
+                    </a>
+                    <a routerLink="/companies"
+                       routerLinkActive="text-brand-600 bg-slate-50 font-semibold"
+                       class="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 transition no-underline">
+                      Companies
                     </a>
                   </nav>
                 } @else {
@@ -99,6 +109,10 @@
             <button (click)="goToAccount()"
                     class="w-full text-left block px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 font-medium cursor-pointer">
               Account
+            </button>
+            <button (click)="goToCompanies()"
+                    class="w-full text-left block px-4 py-2 text-sm text-slate-700 hover:bg-brand-50 hover:text-brand-700 font-medium cursor-pointer">
+              Companies
             </button>
             <button (click)="logout()"
                     class="w-full text-left block px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 font-medium cursor-pointer">

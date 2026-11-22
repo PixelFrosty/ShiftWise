@@ -17,6 +17,8 @@ import { HomeComponent } from './components/home/home.component';
 import { AvailabilityComponent } from './components/availability/availability.component';
 import { ProjectsComponent } from './components/projects/projects.component';
 import { TimeOffComponent } from './components/time-off/time-off.component';
+import { CompatibilityComponent } from './components/compatibility/compatibility.component';
+import { CompaniesComponent } from './components/companies/companies.component';
 
 export const routes: Routes = [
     { path: '', component: LandingPageComponent },
@@ -27,9 +29,11 @@ export const routes: Routes = [
     { path: 'availability', canActivate: [authGuard], component: AvailabilityComponent },
     { path: 'employees', canActivate: [roleGuard('ceo', 'manager')], component: EmployeeDirectoryComponent },
     { path: 'employees/:id/delete', component: EmployeeDeleteConfirmComponent },
+    { path: 'compatibility', canActivate: [roleGuard('ceo', 'manager')], component: CompatibilityComponent },
     { path: 'codes', canActivate: [roleGuard('ceo', 'manager')], component: JoinCodesComponent },
     { path: 'departments', canActivate: [roleGuard('ceo')], component: DepartmentsComponent },
     { path: 'projects', canActivate: [authGuard], component: ProjectsComponent },
+    { path: 'companies', canActivate: [authGuard], component: CompaniesComponent },
     { path: 'time-off', canActivate: [authGuard], component: TimeOffComponent },
     { path: 'notifications', canActivate: [authGuard], component: NotificationsComponent },
     { path: 'join-company', canActivate: [signedInGuard], component: JoinCompanyComponent },
