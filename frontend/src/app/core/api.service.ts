@@ -106,12 +106,16 @@ export interface Slot {
 /** note: what the manager / General Manager wants this person to do (only the person and their managers get it). */
 export interface ShiftPerson { id: number; employee_id: number; name: string; is_roster: boolean; is_minor: boolean; note: string; }
 
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
+
 export interface TaskItem {
   id: number;
   company: number;
   name: string;
   description: string;
   priority: 'low' | 'medium' | 'high';
+  status?: TaskStatus;
+  due_date?: string | null;
   preferred_window: string;
   preferred_day?: number | null;
   preferred_day_name?: string | null;
@@ -125,6 +129,7 @@ export interface TaskItem {
   department: number | null;
   department_name?: string | null;
   employee: number | null;
+  employee_name?: string | null;
 }
 
 export interface ScheduleRecord {
@@ -276,6 +281,7 @@ export class ApiService {
 
   private latestShifts: Shift[] = [];
   private latestEmployees: Employee[] = [];
+  private latestTasks: TaskItem[] = [];
 
   private getLocalEmployees(): Employee[] {
     try {
@@ -296,7 +302,7 @@ export class ApiService {
         list.push(emp);
       }
       localStorage.setItem('sw_local_employees', JSON.stringify(list));
-    } catch {}
+    } catch { }
   }
 
   // employees
@@ -452,7 +458,7 @@ export class ApiService {
     try {
       const list = this.getLocalEmployees().filter(e => e.id !== id);
       localStorage.setItem('sw_local_employees', JSON.stringify(list));
-    } catch {}
+    } catch { }
     this.latestEmployees = this.latestEmployees.filter(e => e.id !== id);
     return this.http.delete<void>(`${API_URL}/employees/${id}/`).pipe(
       catchError(() => of(void 0))
@@ -477,7 +483,7 @@ export class ApiService {
   private saveLocalCompatibility(pairs: CompatibilityPair[]): void {
     try {
       localStorage.setItem('sw_local_compatibility', JSON.stringify(pairs));
-    } catch {}
+    } catch { }
   }
 
   pairwiseCompatibility(): Observable<CompatibilityPair[]> {
@@ -578,7 +584,7 @@ export class ApiService {
   private saveLocalProjects(projects: Project[]): void {
     try {
       localStorage.setItem('sw_local_projects', JSON.stringify(projects));
-    } catch {}
+    } catch { }
   }
 
   projects(): Observable<Project[]> {
@@ -686,34 +692,204 @@ export class ApiService {
   removeSlot(id: number): Observable<void> { return this.http.delete<void>(`${API_URL}/availability/${id}/`); }
 
   // tasks
+  private getLocalTasks(): TaskItem[] {
+    try {
+      const raw = localStorage.getItem('sw_local_tasks');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveLocalTasks(tasks: TaskItem[]): void {
+    try {
+      localStorage.setItem('sw_local_tasks', JSON.stringify(tasks));
+    } catch { }
+  }
+
+  private getDeletedTaskIds(): number[] {
+    try {
+      const raw = localStorage.getItem('sw_deleted_tasks');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private addDeletedTaskId(id: number): void {
+    try {
+      const ids = this.getDeletedTaskIds();
+      if (!ids.includes(id)) {
+        ids.push(id);
+        localStorage.setItem('sw_deleted_tasks', JSON.stringify(ids));
+      }
+    } catch { }
+  }
+
+  private defaultTasks(): TaskItem[] {
+    return [
+      {
+        id: 1, company: 1, name: 'Register', description: 'Front register operation and cash drawer reconciliation',
+        priority: 'medium', status: 'todo', due_date: '2026-11-28',
+        preferred_window: 'flexible', is_recurring: true,
+        required_people: 2, duration_hours: 4.0, skills: [], project: null,
+        department: 1, department_name: 'Operations', employee: 3, employee_name: 'Bob Smith'
+      },
+      {
+        id: 2, company: 1, name: 'Customer Service', description: 'Help desk & floor support during peak hours',
+        priority: 'high', status: 'in_progress', due_date: '2026-11-26',
+        preferred_window: 'flexible', is_recurring: true,
+        required_people: 1, duration_hours: 8.0, skills: [], project: null,
+        department: 1, department_name: 'Operations', employee: 1, employee_name: 'Carol Williams'
+      },
+      {
+        id: 3, company: 1, name: 'Stocking', description: 'Inventory management & shelving',
+        priority: 'low', status: 'done', due_date: '2026-11-24',
+        preferred_window: 'flexible', is_recurring: false,
+        required_people: 3, duration_hours: 6.0, skills: [], project: null,
+        department: 1, department_name: 'Operations', employee: 2, employee_name: 'Alice Johnson'
+      },
+      {
+        id: 4, company: 1, name: 'POS Software Update', description: 'Verify checkout terminal patches before weekend rush',
+        priority: 'high', status: 'todo', due_date: '2026-11-29',
+        preferred_window: 'flexible', is_recurring: false,
+        required_people: 1, duration_hours: 2.0, skills: [], project: null,
+        department: 2, department_name: 'Engineering', employee: 2, employee_name: 'Alice Johnson'
+      }
+    ];
+  }
+
+  private mergeTasks(base: TaskItem[], department?: number | null): TaskItem[] {
+    const deleted = new Set(this.getDeletedTaskIds());
+    const local = this.getLocalTasks();
+    const localMap = new Map(local.map(t => [t.id, t]));
+    const combined: TaskItem[] = [];
+
+    for (const t of local) {
+      if (!deleted.has(t.id) && !base.some(b => b.id === t.id)) {
+        if (department === null || department === undefined || t.department === department) {
+          combined.push({ ...t, status: t.status ?? 'todo' });
+        }
+      }
+    }
+    for (const t of base) {
+      if (deleted.has(t.id)) { continue; }
+      const item = localMap.get(t.id) || t;
+      if (department === null || department === undefined || item.department === department) {
+        combined.push({ ...item, status: item.status ?? 'todo', due_date: item.due_date ?? null });
+      }
+    }
+    this.latestTasks = combined;
+    return combined;
+  }
+
   tasks(department?: number | null): Observable<TaskItem[]> {
     let params = new HttpParams();
     if (department !== null && department !== undefined) {
       params = params.set('department', department);
     }
     return this.http.get<TaskItem[]>(`${API_URL}/tasks/`, { params }).pipe(
+      map(apiList => this.mergeTasks(Array.isArray(apiList) && apiList.length > 0 ? apiList : this.defaultTasks(), department)),
+      catchError(() => of(this.mergeTasks(this.defaultTasks(), department)))
+    );
+  }
+
+  createTask(body: Partial<TaskItem>): Observable<TaskItem> {
+    const payload: Partial<TaskItem> = {
+      company: body.company ?? 1,
+      name: body.name || 'New Task',
+      description: body.description ?? '',
+      priority: body.priority || 'medium',
+      status: body.status || 'todo',
+      due_date: body.due_date ?? null,
+      preferred_window: body.preferred_window || 'flexible',
+      is_recurring: body.is_recurring ?? false,
+      required_people: body.required_people ?? 1,
+      duration_hours: body.duration_hours ?? 1,
+      skills: body.skills ?? [],
+      project: body.project ?? null,
+      department: body.department ?? null,
+      department_name: body.department_name ?? null,
+      employee: body.employee ?? null,
+      employee_name: body.employee_name ?? null
+    };
+    const buildCreated = (res?: Partial<TaskItem>): TaskItem => {
+      const existingIds = new Set([...this.latestTasks, ...this.getLocalTasks()].map(t => t.id));
+      const newId = res?.id && !existingIds.has(res.id) ? res.id : Date.now();
+      return {
+        id: newId,
+        company: payload.company!,
+        name: payload.name!,
+        description: payload.description!,
+        priority: payload.priority!,
+        status: payload.status!,
+        due_date: payload.due_date ?? null,
+        preferred_window: payload.preferred_window!,
+        is_recurring: payload.is_recurring!,
+        required_people: payload.required_people!,
+        duration_hours: payload.duration_hours!,
+        skills: payload.skills!,
+        project: payload.project ?? null,
+        department: payload.department ?? null,
+        department_name: payload.department_name ?? null,
+        employee: payload.employee ?? null,
+        employee_name: payload.employee_name ?? null
+      };
+    };
+
+    return this.http.post<TaskItem>(`${API_URL}/tasks/`, payload).pipe(
+      map(res => {
+        const created = buildCreated(res);
+        const local = this.getLocalTasks();
+        this.saveLocalTasks([created, ...local]);
+        this.latestTasks = [created, ...this.latestTasks];
+        return created;
+      }),
       catchError(() => {
-        return of<TaskItem[]>([
-          {
-            id: 1, company: 1, name: 'Register', description: 'Front register operation',
-            priority: 'medium', preferred_window: 'flexible', is_recurring: true,
-            required_people: 2, duration_hours: 4.0, skills: [], project: null,
-            department: department ?? 1, employee: null
-          },
-          {
-            id: 2, company: 1, name: 'Customer Service', description: 'Help desk & floor support',
-            priority: 'high', preferred_window: 'flexible', is_recurring: true,
-            required_people: 1, duration_hours: 8.0, skills: [], project: null,
-            department: department ?? 1, employee: null
-          },
-          {
-            id: 3, company: 1, name: 'Stocking', description: 'Inventory management & shelving',
-            priority: 'low', preferred_window: 'flexible', is_recurring: false,
-            required_people: 3, duration_hours: 6.0, skills: [], project: null,
-            department: department ?? 1, employee: null
-          }
-        ]);
+        const created = buildCreated();
+        const local = this.getLocalTasks();
+        this.saveLocalTasks([created, ...local]);
+        this.latestTasks = [created, ...this.latestTasks];
+        return of(created);
       })
+    );
+  }
+
+  updateTask(id: number, body: Partial<TaskItem>): Observable<TaskItem> {
+    const applyLocalUpdate = (res?: Partial<TaskItem>): TaskItem => {
+      const local = this.getLocalTasks();
+      const existing = local.find(t => t.id === id)
+        || this.latestTasks.find(t => t.id === id)
+        || this.defaultTasks().find(t => t.id === id);
+      const updated: TaskItem = {
+        ...(existing || {
+          id, company: 1, name: 'Task', description: '', priority: 'medium', status: 'todo',
+          due_date: null, preferred_window: 'flexible', is_recurring: false, required_people: 1,
+          duration_hours: 1, skills: [], project: null, department: null, employee: null
+        }),
+        ...res,
+        ...body,
+        id
+      };
+      const idx = local.findIndex(t => t.id === id);
+      if (idx >= 0) { local[idx] = updated; } else { local.unshift(updated); }
+      this.saveLocalTasks(local);
+      this.latestTasks = this.latestTasks.map(t => t.id === id ? updated : t);
+      return updated;
+    };
+
+    return this.http.patch<TaskItem>(`${API_URL}/tasks/${id}/`, body).pipe(
+      map(res => applyLocalUpdate(res)),
+      catchError(() => of(applyLocalUpdate()))
+    );
+  }
+
+  deleteTask(id: number): Observable<void> {
+    this.addDeletedTaskId(id);
+    this.saveLocalTasks(this.getLocalTasks().filter(t => t.id !== id));
+    this.latestTasks = this.latestTasks.filter(t => t.id !== id);
+    return this.http.delete<void>(`${API_URL}/tasks/${id}/`).pipe(
+      catchError(() => of(void 0))
     );
   }
 
@@ -815,14 +991,14 @@ export class ApiService {
         list.push(id);
         localStorage.setItem('sw_deleted_shifts', JSON.stringify(list));
       }
-    } catch {}
+    } catch { }
   }
 
   private removeDeletedShiftId(id: number): void {
     try {
       const list = this.getDeletedShiftIds().filter(x => x !== id);
       localStorage.setItem('sw_deleted_shifts', JSON.stringify(list));
-    } catch {}
+    } catch { }
   }
 
   /** Without a department: every shift I may see that week (an employee's home and extra departments). */

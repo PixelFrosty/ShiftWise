@@ -733,6 +733,94 @@
           ]
         }
       ]
+    },
+    {
+      "uuid": "route-tasks-list",
+      "type": "http",
+      "documentation": "List Tasks",
+      "method": "get",
+      "endpoint": "tasks/",
+      "responses": [
+        {
+          "uuid": "resp-tasks-list",
+          "body": "[\n  {\n    \"id\": 1,\n    \"company\": 1,\n    \"name\": \"Register\",\n    \"description\": \"Front register operation and cash drawer reconciliation\",\n    \"priority\": \"medium\",\n    \"status\": \"todo\",\n    \"due_date\": \"2026-11-28\",\n    \"preferred_window\": \"flexible\",\n    \"is_recurring\": true,\n    \"required_people\": 2,\n    \"duration_hours\": 4.0,\n    \"skills\": [],\n    \"project\": null,\n    \"department\": 1,\n    \"department_name\": \"Operations\",\n    \"employee\": 3,\n    \"employee_name\": \"Bob Smith\"\n  },\n  {\n    \"id\": 2,\n    \"company\": 1,\n    \"name\": \"Customer Service\",\n    \"description\": \"Help desk & floor support during peak hours\",\n    \"priority\": \"high\",\n    \"status\": \"in_progress\",\n    \"due_date\": \"2026-11-26\",\n    \"preferred_window\": \"flexible\",\n    \"is_recurring\": true,\n    \"required_people\": 1,\n    \"duration_hours\": 8.0,\n    \"skills\": [],\n    \"project\": null,\n    \"department\": 1,\n    \"department_name\": \"Operations\",\n    \"employee\": 1,\n    \"employee_name\": \"Carol Williams\"\n  },\n  {\n    \"id\": 3,\n    \"company\": 1,\n    \"name\": \"Stocking\",\n    \"description\": \"Inventory management & shelving\",\n    \"priority\": \"low\",\n    \"status\": \"done\",\n    \"due_date\": \"2026-11-24\",\n    \"preferred_window\": \"flexible\",\n    \"is_recurring\": false,\n    \"required_people\": 3,\n    \"duration_hours\": 6.0,\n    \"skills\": [],\n    \"project\": null,\n    \"department\": 1,\n    \"department_name\": \"Operations\",\n    \"employee\": 2,\n    \"employee_name\": \"Alice Johnson\"\n  },\n  {\n    \"id\": 4,\n    \"company\": 1,\n    \"name\": \"POS Software Update\",\n    \"description\": \"Verify checkout terminal patches before weekend rush\",\n    \"priority\": \"high\",\n    \"status\": \"todo\",\n    \"due_date\": \"2026-11-29\",\n    \"preferred_window\": \"flexible\",\n    \"is_recurring\": false,\n    \"required_people\": 1,\n    \"duration_hours\": 2.0,\n    \"skills\": [],\n    \"project\": null,\n    \"department\": 2,\n    \"department_name\": \"Engineering\",\n    \"employee\": 2,\n    \"employee_name\": \"Alice Johnson\"\n  }\n]",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Tasks List",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-tasks-create",
+      "type": "http",
+      "documentation": "Create Task",
+      "method": "post",
+      "endpoint": "tasks/",
+      "responses": [
+        {
+          "uuid": "resp-tasks-create",
+          "body": "{\n  \"id\": 101,\n  \"company\": 1,\n  \"name\": \"New Task\",\n  \"description\": \"\",\n  \"priority\": \"medium\",\n  \"status\": \"todo\",\n  \"due_date\": null,\n  \"preferred_window\": \"flexible\",\n  \"is_recurring\": false,\n  \"required_people\": 1,\n  \"duration_hours\": 1.0,\n  \"skills\": [],\n  \"project\": null,\n  \"department\": 1,\n  \"department_name\": \"Operations\",\n  \"employee\": null,\n  \"employee_name\": null\n}",
+          "latency": 0,
+          "statusCode": 201,
+          "label": "Task Created",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-tasks-update",
+      "type": "http",
+      "documentation": "Update Task",
+      "method": "patch",
+      "endpoint": "tasks/:id/",
+      "responses": [
+        {
+          "uuid": "resp-tasks-update",
+          "body": "{\n  \"id\": 1,\n  \"status\": \"in_progress\"\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Task Updated",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "route-tasks-delete",
+      "type": "http",
+      "documentation": "Delete Task",
+      "method": "delete",
+      "endpoint": "tasks/:id/",
+      "responses": [
+        {
+          "uuid": "resp-tasks-delete",
+          "body": "",
+          "latency": 0,
+          "statusCode": 204,
+          "label": "Task Deleted",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      ]
     }
   ],
   "rootChildren": [
@@ -867,6 +955,22 @@
     {
       "type": "route",
       "uuid": "route-me-join"
+    },
+    {
+      "type": "route",
+      "uuid": "route-tasks-list"
+    },
+    {
+      "type": "route",
+      "uuid": "route-tasks-create"
+    },
+    {
+      "type": "route",
+      "uuid": "route-tasks-update"
+    },
+    {
+      "type": "route",
+      "uuid": "route-tasks-delete"
     }
   ],
   "cors": true,

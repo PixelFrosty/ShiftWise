@@ -16,6 +16,7 @@ import { DepartmentsComponent } from './components/departments/departments.compo
 import { HomeComponent } from './components/home/home.component';
 import { AvailabilityComponent } from './components/availability/availability.component';
 import { ProjectsComponent } from './components/projects/projects.component';
+import { TasksComponent } from './components/tasks/tasks.component';
 import { TimeOffComponent } from './components/time-off/time-off.component';
 import { CompatibilityComponent } from './components/compatibility/compatibility.component';
 import { CompaniesComponent } from './components/companies/companies.component';
@@ -33,6 +34,7 @@ export const routes: Routes = [
     { path: 'codes', canActivate: [roleGuard('ceo', 'manager')], component: JoinCodesComponent },
     { path: 'departments', canActivate: [roleGuard('ceo')], component: DepartmentsComponent },
     { path: 'projects', canActivate: [authGuard], component: ProjectsComponent },
+    { path: 'tasks', canActivate: [authGuard], component: TasksComponent },
     { path: 'companies', canActivate: [authGuard], component: CompaniesComponent },
     { path: 'time-off', canActivate: [authGuard], component: TimeOffComponent },
     { path: 'notifications', canActivate: [authGuard], component: NotificationsComponent },
